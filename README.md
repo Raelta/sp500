@@ -19,7 +19,7 @@ python generate_trend_table.py 2010 close 3 10 increase
 # Example: Generate table AND chart
 python generate_trend_table.py 2010 close 3 10 increase --chart
 ```
-*Output: Displays table and optionally saves a chart (e.g., `trend_chart_2010_close_increase.png`).*
+*Output: Displays table and optionally generates an interactive HTML chart (e.g., `trend_chart_2010_close_increase.html`) which automatically opens in your web browser.*
 
 ### 2. Trend Analysis (`check_increasing.py`)
 Analyzes the data for increasing or decreasing trends within specific window sizes. It also verifies if that trend *continues* for a specified number of samples after the window.
