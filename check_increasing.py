@@ -3,13 +3,13 @@ import argparse
 import sys
 from load_data import load_spy_data
 
-def check_trend(year, column_name, sample_value, trend_direction):
+def check_trend(year, column_name, sample_value, trend_direction, continuation_size):
     trend_direction = trend_direction.lower()
     if trend_direction not in ['increase', 'decrease']:
         print(f"Error: Trend direction must be 'increase' or 'decrease'. Got '{trend_direction}'.")
         return
 
-    print(f"Analyzing Year: {year}, Column: '{column_name}', Sample Size: {sample_value}, Trend: {trend_direction}...")
+    print(f"Analyzing Year: {year}, Column: '{column_name}', Sample Size: {sample_value}, Trend: {trend_direction}, Continuation Samples: {continuation_size}...")
     
     # Load data
     df = load_spy_data()
@@ -45,8 +45,13 @@ def check_trend(year, column_name, sample_value, trend_direction):
         sample_size = int(sample_value)
         if sample_size <= 0:
             raise ValueError
-    except ValueError:
-        print(f"Error: Sample size '{sample_value}' must be a positive integer.")
+        
+        cont_size = int(continuation_size)
+        if cont_size <= 0:
+            raise ValueError("Continuation size must be positive")
+            
+    except ValueError as e:
+        print(f"Error: {e}")
         return
 
     print(f"\nProcessing {total_rows} rows in chunks of {sample_size}...")
@@ -69,18 +74,25 @@ def check_trend(year, column_name, sample_value, trend_direction):
         else:
             match_trend = all(values[j] > values[j+1] for j in range(len(values)-1))
             
-        # Check if next value continues the trend
+        # Check if trend continues over next N samples
         continues_trend = False
-        next_idx = i + sample_size
+        next_start_idx = i + sample_size
+        next_end_idx = next_start_idx + cont_size
         
-        if next_idx < len(year_df):
-            next_val = year_df.iloc[next_idx][column_name]
-            last_val = values[-1]
+        if next_end_idx <= len(year_df):
+            # Get the continuation window
+            next_chunk = year_df.iloc[next_start_idx : next_end_idx]
+            next_values = next_chunk[column_name].values
+            
+            # Combine last value of sample with next values to ensure continuity
+            combined_sequence = [values[-1]] + list(next_values)
             
             if trend_direction == 'increase':
-                continues_trend = next_val > last_val
+                # Check if combined sequence is strictly increasing
+                continues_trend = all(combined_sequence[j] < combined_sequence[j+1] for j in range(len(combined_sequence)-1))
             else:
-                continues_trend = next_val < last_val
+                # Check if strictly decreasing
+                continues_trend = all(combined_sequence[j] > combined_sequence[j+1] for j in range(len(combined_sequence)-1))
         
         results.append({
             'start_date': start_date,
@@ -100,7 +112,7 @@ def check_trend(year, column_name, sample_value, trend_direction):
         return
 
     # Save to CSV
-    output_filename = f"trend_analysis_{year}_{column_name}_{sample_size}_{trend_direction}.csv"
+    output_filename = f"trend_analysis_{year}_{column_name}_{sample_size}_{trend_direction}_cont{cont_size}.csv"
     results_df.to_csv(output_filename, index=False)
     print(f"\nFull results saved to '{output_filename}'")
 
@@ -121,7 +133,7 @@ def check_trend(year, column_name, sample_value, trend_direction):
     print(f"\nTotal Windows Checked: {total_count}")
     print(f"Windows Matching Trend: {true_count} ({(true_count/total_count)*100:.2f}%)")
     if true_count > 0:
-        print(f"Of matches, continued: {continued_count} ({(continued_count/true_count)*100:.2f}%)")
+        print(f"Of matches, continued for {cont_size} samples: {continued_count} ({(continued_count/true_count)*100:.2f}%)")
     
     if true_count > 0:
         print(f"\nShowing first 10 windows where trend is {trend_direction.upper()}:")
@@ -154,6 +166,7 @@ if __name__ == "__main__":
     parser.add_argument("column", nargs="?", help="Column to check (e.g., 'open')")
     parser.add_argument("sample", nargs="?", help="Sample size (number of rows per window)")
     parser.add_argument("trend", nargs="?", help="Trend direction ('increase' or 'decrease')")
+    parser.add_argument("continuation", nargs="?", help="Number of samples to check for continuation")
     
     args = parser.parse_args()
     
@@ -161,6 +174,7 @@ if __name__ == "__main__":
     column = args.column
     sample = args.sample
     trend = args.trend
+    cont = args.continuation
 
     # Interactive prompts if args missing
     if not year:
@@ -174,6 +188,9 @@ if __name__ == "__main__":
         
     if not trend:
         trend = get_input("Enter Trend Direction (increase/decrease)", "increase")
+        
+    if not cont:
+        cont = get_valid_int("Enter Continuation Samples (e.g., 1)", 1)
 
     # Normalize trend input
     if trend.lower().startswith('inc'):
@@ -181,4 +198,4 @@ if __name__ == "__main__":
     elif trend.lower().startswith('dec'):
         trend = 'decrease'
 
-    check_trend(year, column, sample, trend)
+    check_trend(year, column, sample, trend, cont)
