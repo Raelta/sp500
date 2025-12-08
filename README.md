@@ -2,7 +2,26 @@
 
 ## 🚀 User Guide: How to Execute
 
-### 1. Trend Analysis (`check_increasing.py`)
+### 1. Trend Table Generator (`generate_trend_table.py`)
+Generates a comprehensive summary table analyzing trends over a **range** of sample sizes (e.g., 3 to 10). It displays the percentage of samples matching the trend and the percentage where the trend continues for the next sample.
+
+**Interactive Mode:**
+```bash
+python generate_trend_table.py
+```
+*Follow the prompts. You can choose to generate a bar chart of the results.*
+
+**Command Line Mode:**
+```bash
+# Example: Check 'close' price for INCREASING trend for sample sizes 3 to 10 in 2010
+python generate_trend_table.py 2010 close 3 10 increase
+
+# Example: Generate table AND chart
+python generate_trend_table.py 2010 close 3 10 increase --chart
+```
+*Output: Displays table and optionally saves a chart (e.g., `trend_chart_2010_close_increase.png`).*
+
+### 2. Trend Analysis (`check_increasing.py`)
 Analyzes the data for increasing or decreasing trends within specific window sizes. It also verifies if that trend *continues* for a specified number of samples after the window.
 
 **Interactive Mode (Recommended):**
@@ -25,7 +44,7 @@ python check_increasing.py 2011 close 10 decrease 1
 ```
 *Output: Saves a CSV file (e.g., `trend_analysis_2010_open_5_increase_cont3.csv`) containing the results and a boolean `continues_trend` column.*
 
-### 2. Monthly Analysis (`analyze_month.py`)
+### 3. Monthly Analysis (`analyze_month.py`)
 Calculates the average "open" price for a specific month across all years (2008-2021).
 
 **Interactive Mode:**
@@ -39,7 +58,7 @@ python analyze_month.py
 python analyze_month.py October
 ```
 
-### 3. General Exploration (`explore_data.py`)
+### 4. General Exploration (`explore_data.py`)
 Runs a full health check and summary of the dataset, including monthly averages over the entire period.
 
 ```bash
@@ -52,7 +71,8 @@ python explore_data.py
 
 | File | Description |
 |------|-------------|
-| **`check_increasing.py`** | **Primary Analysis Tool**. Checks for price trends (increase/decrease) within defined window sizes. It validates if the trend **continues** strictly for a user-defined number of subsequent samples. Generates detailed CSV reports. |
+| **`generate_trend_table.py`** | **Trend Table Generator**. Iterates through a range of sample sizes to produce a summary table showing the frequency of strictly increasing/decreasing trends and their continuation rates. |
+| **`check_increasing.py`** | **Detailed Trend Checker**. Checks for price trends (increase/decrease) within a specific window size. It validates if the trend **continues** strictly for a user-defined number of subsequent samples. Generates detailed CSV reports. |
 | **`analyze_month.py`** | Filters data for a specific month (e.g., January) and groups it by year to show the average opening price. |
 | **`explore_data.py`** | Generates a general report: summary statistics, date ranges, missing values check, and a full list of monthly averages for the entire dataset. |
 | **`load_data.py`** | Utility module that handles loading the CSV file `1_min_SPY_2008-2021.csv`. It parses dates and tracks memory usage/performance. |
