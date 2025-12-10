@@ -2,6 +2,13 @@
 
 ## 🚀 User Guide: How to Execute
 
+### 🌟 Interactive Dashboard (`dashboard.py`)
+Launch the full interactive dashboard to analyze trends with a user-friendly interface.
+```bash
+streamlit run dashboard.py
+```
+*Features: Year selection (single/range), sample size sliders, interactive charts with dropdowns, and data tables.*
+
 ### 1. Trend Table Generator (`generate_trend_table.py`)
 Generates a comprehensive summary table analyzing trends over a **range** of sample sizes (e.g., 3 to 10). It displays the percentage of samples matching the trend and the percentage where the trend continues for the next sample.
 
@@ -71,6 +78,7 @@ python explore_data.py
 
 | File | Description |
 |------|-------------|
+| **`dashboard.py`** | **Interactive Web Dashboard**. A Streamlit app that provides a GUI for trend analysis, allowing dynamic parameter adjustment and instant chart updates. |
 | **`generate_trend_table.py`** | **Trend Table Generator**. Iterates through a range of sample sizes to produce a summary table showing the frequency of strictly increasing/decreasing trends and their continuation rates. |
 | **`check_increasing.py`** | **Detailed Trend Checker**. Checks for price trends (increase/decrease) within a specific window size. It validates if the trend **continues** strictly for a user-defined number of subsequent samples. Generates detailed CSV reports. |
 | **`analyze_month.py`** | Filters data for a specific month (e.g., January) and groups it by year to show the average opening price. |
