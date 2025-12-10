@@ -4,7 +4,7 @@ import os
 import time
 
 # Define the file path
-DEFAULT_FILE_PATH = '1_min_SPY_2008-2021.csv'
+DEFAULT_FILE_PATH = 'spy_data.parquet'
 
 def get_process_memory():
     process = psutil.Process(os.getpid())
@@ -12,7 +12,7 @@ def get_process_memory():
 
 def load_spy_data(file_path=DEFAULT_FILE_PATH):
     """
-    Loads the SPY data from CSV, prints performance metrics, and returns the dataframe.
+    Loads the SPY data (Parquet preferred), prints performance metrics, and returns the dataframe.
     """
     try:
         print(f"Starting process. Initial Memory Usage: {get_process_memory():.2f} MB")
@@ -20,17 +20,17 @@ def load_spy_data(file_path=DEFAULT_FILE_PATH):
         start_time = time.time()
         start_mem = get_process_memory()
 
-        # Load the CSV file
-        # The first column (index 0) looks like an integer index, so we'll set it as the index_col
-        # We will parse the 'date' column. 
-        # Since the date format is specific (YYYYMMDD  HH:MM:SS), we can specify it for efficiency.
-        
-        df = pd.read_csv(
-            file_path, 
-            index_col=0, 
-            parse_dates=['date'],
-            date_format='%Y%m%d  %H:%M:%S'
-        )
+        if file_path.endswith('.parquet'):
+            print(f"Loading Parquet file: {file_path}")
+            df = pd.read_parquet(file_path)
+        else:
+            print(f"Loading CSV file: {file_path}")
+            df = pd.read_csv(
+                file_path, 
+                index_col=0, 
+                parse_dates=['date'],
+                date_format='%Y%m%d  %H:%M:%S'
+            )
         
         end_time = time.time()
         end_mem = get_process_memory()
@@ -51,7 +51,7 @@ def load_spy_data(file_path=DEFAULT_FILE_PATH):
         return df
 
     except Exception as e:
-        print(f"Error loading CSV: {e}")
+        print(f"Error loading data: {e}")
         return None
 
 if __name__ == "__main__":
