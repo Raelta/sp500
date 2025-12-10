@@ -13,7 +13,7 @@ def get_data():
     """Load the SPY data once and cache it."""
     return load_spy_data()
 
-def calculate_trends(df, years, column_name, start_sample, end_sample, trend_direction):
+def calculate_trends(df, years, column_name, start_sample, end_sample, trend_direction, threshold=1.0, continuation_threshold=0.0):
     """
     Calculates trend statistics for the given parameters.
     Returns a DataFrame containing the results.
@@ -40,15 +40,17 @@ def calculate_trends(df, years, column_name, start_sample, end_sample, trend_dir
             return pd.DataFrame()
 
         values = year_df[column_name].values
+        volumes = year_df['volume'].values
+        mean_volume = volumes.mean()
         n_rows = len(values)
         
         for sample_size in range(start_sample, end_sample + 1):
             total_samples = 0
             match_count = 0
             continued_count = 0
+            continued_vol_count = 0
             
-            # Iterate through chunks (vectorized-ish or loop)
-            # Keeping the loop logic from generate_trend_table.py for consistency
+            # Iterate through chunks
             for i in range(0, n_rows, sample_size):
                 chunk_end = i + sample_size
                 if chunk_end > n_rows:
@@ -57,17 +59,21 @@ def calculate_trends(df, years, column_name, start_sample, end_sample, trend_dir
                 chunk = values[i : chunk_end]
                 
                 # Check trend
-                matches_trend = True
-                for j in range(sample_size - 1):
-                    if trend_direction == 'increase':
-                        if chunk[j] >= chunk[j+1]:
-                            matches_trend = False
-                            break
-                    else: # decrease
-                        if chunk[j] <= chunk[j+1]:
-                            matches_trend = False
-                            break
-                
+                total_steps = sample_size - 1
+                if total_steps > 0:
+                    steps_matching = 0
+                    for j in range(total_steps):
+                        if trend_direction == 'increase':
+                            if chunk[j] < chunk[j+1]:
+                                steps_matching += 1
+                        else: # decrease
+                            if chunk[j] > chunk[j+1]:
+                                steps_matching += 1
+                    
+                    matches_trend = (steps_matching / total_steps) >= threshold
+                else:
+                    matches_trend = False
+
                 total_samples += 1
                 
                 if matches_trend:
@@ -78,12 +84,21 @@ def calculate_trends(df, years, column_name, start_sample, end_sample, trend_dir
                         next_val = values[chunk_end]
                         last_val = chunk[-1]
                         
+                        is_continuation = False
                         if trend_direction == 'increase':
-                            if last_val < next_val:
-                                continued_count += 1
+                            target = last_val * (1 + continuation_threshold)
+                            if next_val > target:
+                                is_continuation = True
                         else: # decrease
-                            if last_val > next_val:
-                                continued_count += 1
+                            target = last_val * (1 - continuation_threshold)
+                            if next_val < target:
+                                is_continuation = True
+                        
+                        if is_continuation:
+                            continued_count += 1
+                            # Check volume condition
+                            if volumes[chunk_end] > mean_volume:
+                                continued_vol_count += 1
             
             # Calculate percentages
             if total_samples > 0:
@@ -96,8 +111,10 @@ def calculate_trends(df, years, column_name, start_sample, end_sample, trend_dir
             # Calculate % Continuation (Relative to matches)
             if match_count > 0:
                 pct_continuation_relative = (continued_count / match_count * 100)
+                pct_continuation_vol_relative = (continued_vol_count / match_count * 100)
             else:
                 pct_continuation_relative = 0
+                pct_continuation_vol_relative = 0
             
             all_years_data.append({
                 'Year': year,
@@ -106,9 +123,11 @@ def calculate_trends(df, years, column_name, start_sample, end_sample, trend_dir
                 'Total Samples': total_samples,
                 'Matches': match_count,
                 'Matches & Cont': continued_count,
+                'Matches & Cont (Vol)': continued_vol_count,
                 '% Increasing': round(pct_increasing, 2),
                 '% Inc & Cont': round(pct_continued_total, 2),
-                '% Continuation': round(pct_continuation_relative, 2)
+                '% Continuation': round(pct_continuation_relative, 2),
+                '% Continuation (Vol)': round(pct_continuation_vol_relative, 2)
             })
             
     return pd.DataFrame(all_years_data)
@@ -153,25 +172,43 @@ if df is not None:
     sample_range = st.sidebar.slider("Range (Start - End)", min_value=2, max_value=50, value=(3, 10))
     start_sample, end_sample = sample_range
 
+    # Trend Criteria
+    st.sidebar.subheader("Trend Criteria")
+    strictness = st.sidebar.radio("Strictness", ["Strict (100%)", "Flexible (Threshold)"])
+    threshold = 1.0
+    if strictness == "Flexible (Threshold)":
+        threshold_pct = st.sidebar.slider("Minimum % of steps matching trend", 50, 99, 60)
+        threshold = threshold_pct / 100.0
+
+    # Continuation Criteria
+    st.sidebar.subheader("Continuation Criteria")
+    cont_threshold_pct = st.sidebar.number_input("Continuation Threshold (%)", min_value=0.0, max_value=100.0, value=0.0, step=0.1, help="The subsequent value must be greater/lesser than the last value by at least this percentage.")
+    continuation_threshold = cont_threshold_pct / 100.0
+    
+    use_volume = st.sidebar.checkbox("Require Volume > Yearly Mean", help="Only count continuations where the subsequent step's volume is above the yearly average.")
+
     # --- Analysis & Visualization ---
     
     if st.sidebar.button("Run Analysis", type="primary"):
         with st.spinner("Calculating trends..."):
-            results_df = calculate_trends(df, selected_years, column_name, start_sample, end_sample, trend_direction)
+            results_df = calculate_trends(df, selected_years, column_name, start_sample, end_sample, trend_direction, threshold, continuation_threshold)
         
         if not results_df.empty:
+            # Determine which columns to display based on user selection
+            if use_volume:
+                cont_col = '% Continuation (Vol)'
+                count_col = 'Matches & Cont (Vol)'
+                title_suffix = " - High Volume Only"
+            else:
+                cont_col = '% Continuation'
+                count_col = 'Matches & Cont'
+                title_suffix = ""
+
             # --- Chart ---
-            st.subheader(f"Trend Continuation Probability ({trend_direction})")
+            criteria_label = "Strict (100%)" if threshold == 1.0 else f"Threshold ({int(threshold*100)}%)"
+            st.subheader(f"Trend Continuation Probability ({trend_direction}) - {criteria_label}{title_suffix}")
             
-            # Create interactive chart with dropdown logic (or just a simple chart if single year, but logic works for multi)
-            # Actually, Streamlit handles interactivity well. We can just show the chart.
-            # If multiple years, we can use Plotly's color encoding or facets, OR just use the same dropdown logic as before.
-            # Since the user liked the dropdown in the HTML, let's replicate that feel or improve it.
-            # Streamlit allows user to filter the VIEW of the chart using widgets too.
-            # But the user asked for "a simple interface... Each time a parameter is entered the bar chart will update."
-            # If I plot all years in one chart with a dropdown *inside* Plotly, that works.
-            
-            # Reusing the Plotly Logic from generate_trend_table.py
+            # Reusing the Plotly Logic
             fig = go.Figure()
             
             unique_years = sorted(results_df['Year'].unique())
@@ -181,19 +218,19 @@ if df is not None:
                 
                 hover_text = [
                     f"Sample Size: {ss}<br>% Continuation: {pct:.2f}%<br>% Inc & Cont: {pct_ic:.2f}%"
-                    for ss, pct, pct_ic in zip(year_data['Sample Size'], year_data['% Continuation'], year_data['% Inc & Cont'])
+                    for ss, pct, pct_ic in zip(year_data['Sample Size'], year_data[cont_col], year_data['% Inc & Cont'])
                 ]
                 
                 bar_text = [
                     f"Tot: {t}<br>Mat: {m}<br>Cont: {c}"
-                    for t, m, c in zip(year_data['Total Samples'], year_data['Matches'], year_data['Matches & Cont'])
+                    for t, m, c in zip(year_data['Total Samples'], year_data['Matches'], year_data[count_col])
                 ]
                 
                 visible = (i == 0)
                 
                 fig.add_trace(go.Bar(
                     x=year_data['Sample Size'],
-                    y=year_data['% Continuation'],
+                    y=year_data[cont_col],
                     name=str(year),
                     visible=visible,
                     marker_color='#2c3e50',
@@ -233,7 +270,7 @@ if df is not None:
                 title=dict(text=initial_title),
                 xaxis_title="Sample Size",
                 yaxis_title="% Continuation (Relative to Matches)",
-                yaxis=dict(range=[0, results_df['% Continuation'].max() * 1.3]),
+                yaxis=dict(range=[0, results_df[cont_col].max() * 1.3]),
                 xaxis=dict(type='category'),
                 template="plotly_white",
                 height=600
@@ -243,7 +280,9 @@ if df is not None:
             
             # --- Data Table ---
             st.subheader("Detailed Data")
-            st.dataframe(results_df, use_container_width=True)
+            # Filter table columns for clarity, but show relevant ones
+            display_cols = ['Year', 'Sample Size', 'Total Samples', 'Matches', count_col, cont_col, '% Inc & Cont']
+            st.dataframe(results_df[display_cols], use_container_width=True)
             
         else:
             st.warning("No data found for the selected criteria.")

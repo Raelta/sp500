@@ -7,7 +7,7 @@ Launch the full interactive dashboard to analyze trends with a user-friendly int
 ```bash
 streamlit run dashboard.py
 ```
-*Features: Year selection (single/range), sample size sliders, interactive charts with dropdowns, and data tables.*
+*Features: Year selection (single/range), sample size sliders, interactive charts with dropdowns, trend strictness settings, continuation threshold, volume filtering (High Volume Only), and data tables.*
 
 ### 1. Trend Table Generator (`generate_trend_table.py`)
 Generates a comprehensive summary table analyzing trends over a **range** of sample sizes (e.g., 3 to 10). It displays the percentage of samples matching the trend and the percentage where the trend continues for the next sample.
