@@ -1,4 +1,4 @@
-.venv
+venv
 1_min_SPY_2008-2021.csv
 *.csv
 __pycache__/

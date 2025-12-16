@@ -1,5 +1,4 @@
-pandas
-psutil
-matplotlib
-plotly
 streamlit
+pandas
+plotly
+pyarrow
