@@ -1,13 +1,14 @@
 import plotly.graph_objects as go
 import pandas as pd
 
-def plot_pattern(df, match_row, padding=10):
+def plot_pattern(df, match_row, padding=10, dark_mode=False):
     """
     Plots a specific pattern (Bump + Slide) with context.
     
     match_row: A Series from the results DataFrame (must have name as original index)
     df: The full dataframe (for context)
     padding: Number of bars before and after to show
+    dark_mode: Boolean to use dark theme
     """
     
     # We use the index from match_row to find location in df
@@ -91,9 +92,12 @@ def plot_pattern(df, match_row, padding=10):
         annotation_text="Slide", annotation_position="top left"
     )
     
+    template = "plotly_dark" if dark_mode else "plotly"
+    
     fig.update_layout(
         title=f"Pattern starting {start_date}",
         xaxis_rangeslider_visible=False,
-        height=500
+        height=500,
+        template=template
     )
     return fig
