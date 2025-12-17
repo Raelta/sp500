@@ -134,9 +134,10 @@ if run_btn_top:
         df,
         bump_len, bump_threshold, bump_thresh_type,
         slide_len, slide_threshold, slide_thresh_type,
-        min_bump_vol, min_slide_vol,
-        (time_start, time_end),
-        days,
+        min_bump_vol=min_bump_vol,
+        min_slide_vol=min_slide_vol,
+        time_range=(time_start, time_end),
+        days_of_week=days,
         progress_callback=update_progress
     )
     
