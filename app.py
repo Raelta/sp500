@@ -5,6 +5,7 @@ from src.data_loader import load_data_cached
 from src.analyzer import find_bumps_and_slides
 from src.visualizer import plot_pattern
 from src.data_validator import validate_dataset, get_yearly_duplicate_summary
+from src.news_provider import get_google_news_url
 from datetime import time
 
 # Performance Logging Utility
@@ -145,7 +146,7 @@ with st.sidebar.form("analysis_form"):
     for day in days_options:
         if st.checkbox(day, value=True, key=f"check_{day}"):
             days.append(day)
-            
+
 # Show Debug Logs in Sidebar
 with st.sidebar.expander("Debug Profiling", expanded=False):
     if 'perf_logs' in st.session_state:
@@ -207,6 +208,24 @@ if st.session_state.results is not None:
         
         with col1:
             match_idx = st.selectbox("Select Match", results.index, format_func=format_func)
+            
+            if match_idx is not None and match_idx in results.index:
+                row = results.loc[match_idx]
+                # --- News Section ---
+                with st.expander("📰 Market News for " + str(row['date'].date()), expanded=False):
+                    news_date_str = str(row['date'].date())
+                    
+                    search_topic = st.selectbox(
+                        "Search Topic", 
+                        ["S&P 500", "SPY", "Stock Market", "Economy", "Finance"],
+                        index=0,
+                        help="Choose a broader or specific term to find relevant news."
+                    )
+                    
+                    fallback_url = get_google_news_url(news_date_str, search_topic)
+                    
+                    st.markdown(f"### [🔍 Search Google News for '{search_topic}' ({news_date_str})]({fallback_url})")
+                    st.caption("Opens a new tab with Google News search results filtered to this specific date.")
         
         with col2:
             if match_idx is not None and match_idx in results.index:
@@ -231,6 +250,7 @@ if st.session_state.results is not None:
                     log_perf("Viz: Render Call", t_render_start)
                     
                     log_perf("Viz: Total Flow", t_viz_start)
+
                 except Exception as e:
                     chart_container.error(f"Error loading visualization: {str(e)}")
 
