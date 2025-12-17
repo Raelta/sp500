@@ -1,21 +1,47 @@
 import streamlit as st
 import pandas as pd
+import time as time_module
 from src.data_loader import load_data_cached
 from src.analyzer import find_bumps_and_slides
 from src.visualizer import plot_pattern
 from src.data_validator import validate_dataset, get_yearly_duplicate_summary
 from datetime import time
 
+# Performance Logging Utility
+def log_perf(label, start_time):
+    duration = time_module.time() - start_time
+    msg = f"[PERF] {label}: {duration:.4f}s"
+    print(msg)
+    if 'perf_logs' not in st.session_state:
+        st.session_state.perf_logs = []
+    st.session_state.perf_logs.append(msg)
+    return time_module.time() # Return new start time
+
 st.set_page_config(page_title="SP500 Bump & Slide", layout="wide")
 st.title("SP500 Bump & Slide Analysis")
 
+# Clear logs on rerun if needed, or keep history. 
+# For debugging single interaction, clearing is better.
+if 'perf_logs' not in st.session_state:
+    st.session_state.perf_logs = []
+else:
+    # Reset logs for this run
+    st.session_state.perf_logs = []
+
+t0 = time_module.time()
+print(f"--- RERUN STARTED at {t0} ---")
+
+# Load Data
 # Load Data
 with st.spinner("Loading data..."):
-    df = load_data_cached("spy_data.parquet")
+    t_load_start = time_module.time()
+    df, val_report = load_data_cached("spy_data.parquet")
+    t0 = log_perf("Data Load (Cached)", t_load_start)
+
 st.success(f"Loaded {len(df)} rows.")
 
 # Data Quality Check
-val_report = validate_dataset(df)
+# val_report is already computed and cached
 has_issues = (val_report['duplicates']['count'] > 0) or \
              (len(val_report['missing_values']) > 0) or \
              (val_report['intraday_gaps']['count'] > 0)
@@ -119,9 +145,16 @@ with st.sidebar.form("analysis_form"):
     for day in days_options:
         if st.checkbox(day, value=True, key=f"check_{day}"):
             days.append(day)
+            
+# Show Debug Logs in Sidebar
+with st.sidebar.expander("Debug Profiling", expanded=False):
+    if 'perf_logs' in st.session_state:
+        st.code("\n".join(st.session_state.perf_logs))
 
 # Run Logic
 if run_btn_top:
+    t_analysis_start = time_module.time()
+    
     # Progress UI Elements (Centered at top of main area)
     prog_bar = st.progress(0)
     status_text = st.empty()
@@ -146,6 +179,7 @@ if run_btn_top:
     status_text.empty()
     
     st.session_state.results = results
+    log_perf("Full Analysis", t_analysis_start)
 
 # Display Results
 if st.session_state.results is not None:
@@ -155,9 +189,19 @@ if st.session_state.results is not None:
     if not results.empty:
         st.subheader("Visualize Pattern")
         
+        t_options_start = time_module.time()
+        # Optimize Selectbox: Pre-calculate labels vectorized
+        # Create a dictionary map for O(1) lookup
+        labels = (
+            results['date'].astype(str) + 
+            " | Bump: " + results['bump_change'].map('{:,.2f}'.format) + 
+            " | Slide: " + results['slide_change'].map('{:,.2f}'.format)
+        )
+        label_dict = labels.to_dict()
+        log_perf("Selectbox: Labels Generated", t_options_start)
+        
         def format_func(idx):
-            row = results.loc[idx]
-            return f"{row['date']} | Bump: {row['bump_change']:.2f} | Slide: {row['slide_change']:.2f}"
+            return label_dict[idx]
         
         col1, col2 = st.columns([1, 2])
         
@@ -166,12 +210,35 @@ if st.session_state.results is not None:
         
         with col2:
             if match_idx is not None and match_idx in results.index:
-                with st.spinner("Loading visualization..."):
+                t_viz_start = time_module.time()
+                
+                # Use a placeholder for the chart area
+                chart_container = st.empty()
+                
+                # Show explicit loading state in the container
+                with chart_container.container():
+                    st.info("⏳ **Generating visualization...**\n\nProcessing chart data, please wait...", icon="⏳")
+                
+                try:
+                    t_prep_start = time_module.time()
                     row = results.loc[match_idx]
                     fig = plot_pattern(df, row, bump_len=bump_len, slide_len=slide_len)
-                    st.plotly_chart(fig, use_container_width=True)
+                    log_perf("Viz: Pattern Generation", t_prep_start)
+                    
+                    t_render_start = time_module.time()
+                    # Replace loading message with chart
+                    chart_container.plotly_chart(fig, width="stretch")
+                    log_perf("Viz: Render Call", t_render_start)
+                    
+                    log_perf("Viz: Total Flow", t_viz_start)
+                except Exception as e:
+                    chart_container.error(f"Error loading visualization: {str(e)}")
 
         st.subheader("Matches")
-        st.dataframe(results, width='stretch')
+        st.dataframe(results, width="stretch")
     else:
         st.info("No matches found with current parameters.")
+
+t_end = time_module.time()
+log_perf("Script Execution Complete", t0)
+print(f"--- RERUN ENDED at {t_end} (Duration: {t_end - t0:.4f}s) ---")

@@ -1,5 +1,6 @@
 import pandas as pd
 import streamlit as st
+from src.data_validator import validate_dataset
 
 def load_data_uncached(filepath="spy_data.parquet"):
     """
@@ -14,6 +15,9 @@ def load_data_uncached(filepath="spy_data.parquet"):
 @st.cache_data
 def load_data_cached(filepath="spy_data.parquet"):
     """
-    Loads the parquet data with Streamlit caching.
+    Loads the parquet data with Streamlit caching and pre-calculates validation.
+    Returns (df, val_report)
     """
-    return load_data_uncached(filepath)
+    df = load_data_uncached(filepath)
+    val_report = validate_dataset(df)
+    return df, val_report
