@@ -14,7 +14,8 @@ def find_bumps_and_slides(
     slide_len, slide_threshold, slide_thresh_type,
     min_bump_vol=0, min_slide_vol=0,
     time_range=None, # (start_time, end_time)
-    days_of_week=None # list of ints 0-6 or names
+    days_of_week=None, # list of ints 0-6 or names
+    progress_callback=None # function(message, percent)
 ):
     """
     Identifies Bump followed by Slide patterns.
@@ -28,6 +29,8 @@ def find_bumps_and_slides(
     """
     
     # 1. Pre-calculate Volume Sums (Rolling)
+    if progress_callback: progress_callback("Calculating volume metrics...", 10)
+    
     # rolling sum aligns to the right edge of window, so we shift back to align to start
     # We need rolling sum for bump_len and slide_len
     
@@ -48,6 +51,8 @@ def find_bumps_and_slides(
     slide_vol = df['volume'].rolling(window=slide_len).sum().shift(-(bump_len + slide_len - 1))
 
     # 2. Calculate Price Changes
+    if progress_callback: progress_callback("Analyzing price changes...", 30)
+
     # Bump Change
     bump_open = df['open']
     bump_close = df['close'].shift(-(bump_len - 1))
@@ -59,6 +64,8 @@ def find_bumps_and_slides(
     slide_change = calculate_change(slide_open, slide_close, slide_thresh_type)
     
     # 3. Create Candidate DataFrame
+    if progress_callback: progress_callback("Structuring candidate data...", 50)
+
     # Use indices to track
     candidates = pd.DataFrame({
         'date': df['date'],
@@ -75,6 +82,8 @@ def find_bumps_and_slides(
     })
     
     # 4. Filter by Thresholds and Volume
+    if progress_callback: progress_callback("Filtering candidates...", 70)
+
     mask = (
         (candidates['bump_change'].abs() >= bump_threshold) &
         (candidates['slide_change'].abs() >= slide_threshold) &
@@ -86,6 +95,8 @@ def find_bumps_and_slides(
     
     # 5. Filter by Time and Day
     if not results.empty:
+        if progress_callback: progress_callback("Applying time and day filters...", 85)
+
         # Time of Day (based on Bump Start)
         if time_range:
             start_t, end_t = time_range
@@ -103,4 +114,6 @@ def find_bumps_and_slides(
             # Let's standardize on day_name()
             results = results[results['date'].dt.day_name().isin(days_of_week)]
 
+    if progress_callback: progress_callback("Finalizing results...", 100)
+    
     return results.dropna()

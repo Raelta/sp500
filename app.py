@@ -122,16 +122,29 @@ with st.sidebar.form("analysis_form"):
 
 # Run Logic
 if run_btn_top:
-    with st.spinner("Analyzing..."):
-        results = find_bumps_and_slides(
-            df,
-            bump_len, bump_threshold, bump_thresh_type,
-            slide_len, slide_threshold, slide_thresh_type,
-            min_bump_vol, min_slide_vol,
-            (time_start, time_end),
-            days
-        )
-        st.session_state.results = results
+    # Progress UI Elements (Centered at top of main area)
+    prog_bar = st.progress(0)
+    status_text = st.empty()
+    
+    def update_progress(msg, percent):
+        prog_bar.progress(percent)
+        status_text.markdown(f"**{msg}**")
+
+    results = find_bumps_and_slides(
+        df,
+        bump_len, bump_threshold, bump_thresh_type,
+        slide_len, slide_threshold, slide_thresh_type,
+        min_bump_vol, min_slide_vol,
+        (time_start, time_end),
+        days,
+        progress_callback=update_progress
+    )
+    
+    # Clear progress after completion
+    prog_bar.empty()
+    status_text.empty()
+    
+    st.session_state.results = results
 
 # Display Results
 if st.session_state.results is not None:
