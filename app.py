@@ -169,6 +169,9 @@ with st.sidebar:
     days_options = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
     days = render_checkbox_dropdown("Days of Week", days_options, "filter_day")
 
+st.sidebar.subheader("App Layout")
+layout_order = st.sidebar.radio("View Order", ["Table Top", "Chart Top"], index=0, horizontal=True)
+
 # Show Debug Logs in Sidebar
 with st.sidebar.expander("Debug Profiling", expanded=False):
     if 'perf_logs' in st.session_state:
@@ -226,89 +229,86 @@ if st.session_state.results is not None:
     st.metric("Matches Found", len(results))
     
     if not results.empty:
-        st.subheader("Visualize Pattern")
-        
-        # Initialize match_idx from session state if available (from table selection)
-        # Default to first match if nothing selected
-        if 'selected_match_idx' not in st.session_state:
-            st.session_state.selected_match_idx = results.index[0] if not results.empty else None
-        
-        # Ensure the selected index is valid for current results
-        # If the filtered results change, the old selection might be gone. Reset to first.
-        if st.session_state.selected_match_idx not in results.index and not results.empty:
-            st.session_state.selected_match_idx = results.index[0]
-
-        match_idx = st.session_state.selected_match_idx
-
-        st.subheader("Matches")
-        st.caption("Click a row to visualize it.")
-        
-        # Interactive Table
-        # We explicitly configure columns to ensure sorting is enabled and intuitive
-        event = st.dataframe(
-            results, 
-            width="stretch",
-            on_select="rerun",
-            selection_mode="single-row",
-            key="matches_table", # Stable key to preserve sort state across reruns
-            column_config={
-                "date": st.column_config.DatetimeColumn("Date", format="YYYY-MM-DD HH:mm"),
-                "bump_change": st.column_config.NumberColumn("Bump Change", format="%.2f"),
-                "slide_change": st.column_config.NumberColumn("Slide Change", format="%.2f"),
-                "bump_vol": st.column_config.NumberColumn("Bump Vol"),
-                "slide_vol": st.column_config.NumberColumn("Slide Vol"),
-            },
-            hide_index=True # Cleaner UI, user sorts by columns
-        )
-        
-        # Handle Table Selection
-        if len(event.selection.rows) > 0:
-            selected_row_numeric_idx = event.selection.rows[0]
-            new_idx = results.index[selected_row_numeric_idx]
-            if new_idx != st.session_state.selected_match_idx:
-                st.session_state.selected_match_idx = new_idx
-                st.rerun()
-
-        # Render Visualization if we have a selection
-        if match_idx is not None and match_idx in results.index:
-            st.divider() # Separation
+        # Define render functions for reordering
+        def render_table():
+            st.subheader("Matches")
+            st.caption("Click a row to visualize it.")
             
-            col1, col2 = st.columns([1, 2])
+            # Interactive Table
+            event = st.dataframe(
+                results, 
+                width="stretch",
+                on_select="rerun",
+                selection_mode="single-row",
+                key="matches_table", # Stable key to preserve sort state across reruns
+                column_config={
+                    "date": st.column_config.DatetimeColumn("Date", format="YYYY-MM-DD HH:mm"),
+                    "bump_change": st.column_config.NumberColumn("Bump Change", format="%.2f"),
+                    "slide_change": st.column_config.NumberColumn("Slide Change", format="%.2f"),
+                    "bump_vol": st.column_config.NumberColumn("Bump Vol"),
+                    "slide_vol": st.column_config.NumberColumn("Slide Vol"),
+                },
+                hide_index=True 
+            )
             
-            row = results.loc[match_idx]
+            # Handle Table Selection
+            if len(event.selection.rows) > 0:
+                selected_row_numeric_idx = event.selection.rows[0]
+                new_idx = results.index[selected_row_numeric_idx]
+                if 'selected_match_idx' not in st.session_state or new_idx != st.session_state.selected_match_idx:
+                    st.session_state.selected_match_idx = new_idx
+                    st.rerun()
+
+        def render_chart():
+            # Initialize match_idx logic
+            if 'selected_match_idx' not in st.session_state:
+                st.session_state.selected_match_idx = results.index[0] if not results.empty else None
             
-            with col1:
-                # --- Match Details & News ---
-                st.subheader(f"Date: {row['date'].date()}")
-                st.metric("Bump Change", f"{row['bump_change']:.2f}%")
-                st.metric("Slide Change", f"{row['slide_change']:.2f}%")
+            # Validation
+            if st.session_state.selected_match_idx not in results.index and not results.empty:
+                st.session_state.selected_match_idx = results.index[0]
+
+            match_idx = st.session_state.selected_match_idx
+
+            if match_idx is not None and match_idx in results.index:
+                st.subheader("Visualize Pattern")
                 
-                st.divider()
+                row = results.loc[match_idx]
                 
-                # --- News Section ---
-                with st.expander("📰 Market News", expanded=True):
-                    news_date_str = str(row['date'].date())
+                # --- Top Info Row: Metrics and News Selector ---
+                # Layout: Date | Bump | Slide | News Dropdown | Search Link
+                
+                # We use columns to spread info horizontally above the chart
+                info_col1, info_col2, info_col3, info_col4 = st.columns([2, 1, 1, 3])
+                
+                with info_col1:
+                    st.markdown(f"### {row['date'].date()}")
+                
+                with info_col2:
+                    st.metric("Bump", f"{row['bump_change']:.2f}%")
                     
+                with info_col3:
+                    st.metric("Slide", f"{row['slide_change']:.2f}%")
+                    
+                with info_col4:
+                    # Compact News Controls
+                    news_date_str = str(row['date'].date())
+                    # Using a simpler layout for news to save vertical space
                     search_topic = st.selectbox(
-                        "Search Topic", 
+                        "News Topic", 
                         ["S&P 500", "SPY", "Stock Market", "Economy", "Finance"],
                         index=0,
-                        help="Choose a broader or specific term to find relevant news."
+                        label_visibility="collapsed" # Save space, label implied
                     )
-                    
                     fallback_url = get_google_news_url(news_date_str, search_topic)
-                    
-                    st.markdown(f"### [🔍 Search Google News]({fallback_url})")
-                    st.caption(f"Topic: {search_topic} | Date: {news_date_str}")
+                    st.markdown(f"[**🔍 Search News: {search_topic}**]({fallback_url})")
 
-            with col2:
-                # --- Chart Visualization ---
+                st.divider()
+
+                # --- Chart Visualization (Full Width) ---
                 t_viz_start = time_module.time()
                 
-                # Use a placeholder for the chart area
                 chart_container = st.empty()
-                
-                # Show explicit loading state in the container
                 with chart_container.container():
                     st.info("⏳ **Generating visualization...**", icon="⏳")
                 
@@ -319,7 +319,7 @@ if st.session_state.results is not None:
                     log_perf("Viz: Pattern Generation", t_prep_start)
                     
                     t_render_start = time_module.time()
-                    # Replace loading message with chart
+                    # Full width chart
                     chart_container.plotly_chart(fig, width="stretch")
                     log_perf("Viz: Render Call", t_render_start)
                     
@@ -327,6 +327,16 @@ if st.session_state.results is not None:
 
                 except Exception as e:
                     chart_container.error(f"Error loading visualization: {str(e)}")
+
+        # Execute Layout Order
+        if layout_order == "Table Top":
+            render_table()
+            st.divider()
+            render_chart()
+        else:
+            render_chart()
+            st.divider()
+            render_table()
 
     else:
         st.info("No matches found with current parameters.")
