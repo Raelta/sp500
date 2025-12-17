@@ -7,11 +7,13 @@ This project is a Streamlit application designed to analyze intraday SPY (S&P 50
 
 | File | Responsibility |
 |------|----------------|
-| **`app.py`** | Main Streamlit entry point. Handles UI, sidebar configuration, performance logging, and orchestration of loading/analysis/visualization. |
+| **`app.py`** | Main Streamlit entry point. Handles UI, sidebar configuration, performance logging, and orchestration of loading/analysis/visualization. **Now Reactive (No Form).** |
 | **`src/data_loader.py`** | Handles data loading using `st.cache_data`. **Critical**: It bundles data validation inside the cached function to avoid re-running validation on every interaction. |
-| **`src/analyzer.py`** | Contains the core `find_bumps_and_slides` function. Uses vectorized pandas operations (rolling windows, shifts) for performance. Accepts a `progress_callback`. |
-| **`src/visualizer.py`** | Generates Plotly Candlestick charts. Optimized to calculate date ranges directly from indices rather than searching. |
-| **`src/data_validator.py`** | Checks for duplicates, missing values, and intraday gaps. Called exclusively by `data_loader.py` to ensure result caching. |
+| **`src/analyzer.py`** | Contains the core `find_bumps_and_slides` function. Uses vectorized analysis logic. Accepts a `progress_callback`. |
+| **`src/visualizer.py`** | Generates Plotly Candlestick charts. **Robust**: Clips slide highlights to actual data range to prevent whitespace gaps. |
+| **`src/data_validator.py`** | Checks for duplicates, gaps, and **Missing Minutes**. Called exclusively by `data_loader.py` to ensure result caching. |
+| **`src/news_provider.py`** | Generates Google News search links for specific dates. Replaced Polygon.io integration. |
+| **`src/ui_utils.py`** | Contains custom UI components like the Excel-style **Checkbox Dropdown** for filters. |
 | **`cli.py`** | Command-line interface for running analysis without the web UI. |
 
 ## 3. Key Algorithms
@@ -25,27 +27,27 @@ The "Bump & Slide" pattern is defined by:
 
 ### Data Loading (`src/data_loader.py`)
 *   **Caching Strategy**: Uses `@st.cache_data`.
-*   **Optimization**: Validation (`validate_dataset`) is performed *inside* the cached function. This prevents the expensive validation logic from blocking the UI on every interaction (which causes "faded screen" delays).
+*   **Optimization**: Validation (`validate_dataset`) is performed *inside* the cached function. This prevents the expensive validation logic from blocking the UI on every interaction.
 
-## 4. Critical Optimizations (DO NOT REVERT)
+## 4. Architectural Decisions & Optimizations
 
-### A. Selectbox Performance (`app.py`)
-**Problem**: Generating formatted labels for thousands of matches using `results.loc[idx]` in a loop is too slow (O(N) dataframe access).
-**Solution**:
-1.  **Vectorized Labels**: Labels are pre-calculated using pandas string concatenation:
-    ```python
-    labels = results['date'].astype(str) + " | Bump: " + ...
-    ```
-2.  **Dictionary Lookup**: These labels are converted to a `dict`. The `format_func` performs an O(1) dictionary lookup.
-**Constraint**: Keep this pattern. Do not switch back to row-by-row formatting.
+### A. Reactive UI & Layout
+**Change**: Removed `st.form` ("Run Analysis" button).
+**Reason**: To support Excel-style "Select All" filters (which require immediate callbacks) and provide instant feedback on slider changes.
+**Navigation**: Dropped the "Select Match" dropdown in favor of **Interactive Table Selection** (`on_select="rerun"`).
+**Layout**: User can toggle between "Table Top" and "Chart Top" layouts.
 
-### B. Visualization Loading (`app.py`)
+### B. Interactive Table Sorting
+**Constraint**: Standard `st.dataframe` resets sort order on rerun.
+**Solution**: Added a stable `key="matches_table"`. This tells Streamlit to preserve client-side state (sort order, scroll position) across reruns triggered by row selection.
+
+### C. Visualization Loading (`app.py`)
 **Problem**: User perceived a delay/fade before the chart appeared.
 **Solution**:
 1.  **In-Place Placeholder**: Uses `st.empty()` to show a "⏳ Generating visualization..." message *in the exact space* where the chart will load, reducing layout shift.
 2.  **Logic Separation**: Data loading and Validation are separated from the Visualization flow via caching so the UI remains responsive.
 
-### C. Deprecated Arguments
+### D. Deprecated Arguments
 **Constraint**: Use `width="stretch"` for `st.dataframe` and `st.plotly_chart`.
 *   *Note*: While `use_container_width=True` is standard in newer Streamlit, the specific environment for this project explicitly warns to use `width='stretch'`. **Follow this warning.**
 
