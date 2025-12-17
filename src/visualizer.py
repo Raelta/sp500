@@ -1,60 +1,31 @@
 import plotly.graph_objects as go
 import pandas as pd
 
-def plot_pattern(df, match_row, padding=10):
+def plot_pattern(df, match_row, padding=10, bump_len=None, slide_len=None):
     """
     Plots a specific pattern (Bump + Slide) with context.
     
     match_row: A Series from the results DataFrame (must have name as original index)
     df: The full dataframe (for context)
     padding: Number of bars before and after to show
+    bump_len: Length of bump (optional, for optimization)
+    slide_len: Length of slide (optional, for optimization)
     """
     
     # We use the index from match_row to find location in df
     start_idx = match_row.name
-    
-    # We need to find the end index.
-    # We can infer it from the dates if indices are not continuous, but assuming integer index is continuous.
-    # Let's rely on date slicing for safety if indices are not reliable, 
-    # but `data_loader` resets index so it should be 0..N.
-    
-    # Get the dates
     start_date = match_row['date']
-    slide_end_date = match_row['slide_end_date']
-    
-    # Find indices for the plot window
-    # We want a window around the pattern
-    # We can't easily guess the index of slide_end_date without searching, 
-    # unless we assume the index is clean.
-    # Let's trust the index if it matches the date, otherwise search.
-    
-    if df.loc[start_idx, 'date'] == start_date:
-        # Index is aligned
-        # We need the index of the end date. 
-        # Since we don't have the length explicitly in match_row, we can search or pass it.
-        # But wait, in analyzer:
-        # slide_end_idx = index + bump_len + slide_len - 1
-        # We didn't store slide_end_idx in results, only dates.
-        # But we can find the index where date == slide_end_date
-        pass
-    
-    # Safer approach: Filter by date range with padding
-    # But adding padding in "rows" is hard with dates.
-    # We'll use the index from match_row (start_idx) and find the end index by searching.
-    
-    # Optimization: If we assume contiguous data (1 min intervals), we can guess.
-    # But data might have gaps (nights, weekends).
-    # So we search for the end date index.
-    # This is O(N) or O(log N) if sorted.
-    # Since we are plotting one, it's fine.
-    
-    # Find index of slide_end_date
-    # Using searchsorted on dates
-    # df['date'] is sorted.
-    import numpy as np
-    end_pos = np.searchsorted(df['date'], slide_end_date)
-    # end_pos might be after the element if not found, but it should be there.
-    if end_pos >= len(df): end_pos = len(df) - 1
+
+    # Optimization: If lengths are provided, we can calculate end index directly
+    if bump_len is not None and slide_len is not None:
+        # Pattern covers indices [start_idx, start_idx + bump_len + slide_len - 1]
+        end_pos = start_idx + bump_len + slide_len - 1
+    else:
+        # Fallback: Find index of slide_end_date using search
+        slide_end_date = match_row['slide_end_date']
+        import numpy as np
+        end_pos = np.searchsorted(df['date'], slide_end_date)
+        if end_pos >= len(df): end_pos = len(df) - 1
     
     plot_start_idx = max(0, start_idx - padding)
     plot_end_idx = min(len(df) - 1, end_pos + padding)

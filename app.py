@@ -166,9 +166,10 @@ if st.session_state.results is not None:
         
         with col2:
             if match_idx is not None and match_idx in results.index:
-                row = results.loc[match_idx]
-                fig = plot_pattern(df, row)
-                st.plotly_chart(fig, width="stretch")
+                with st.spinner("Loading visualization..."):
+                    row = results.loc[match_idx]
+                    fig = plot_pattern(df, row, bump_len=bump_len, slide_len=slide_len)
+                    st.plotly_chart(fig, use_container_width=True)
 
         st.subheader("Matches")
         st.dataframe(results, width='stretch')
