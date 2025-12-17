@@ -6,6 +6,7 @@ from src.analyzer import find_bumps_and_slides
 from src.visualizer import plot_pattern
 from src.data_validator import validate_dataset, get_yearly_duplicate_summary
 from src.news_provider import get_google_news_url
+from src.ui_utils import render_checkbox_dropdown
 from datetime import time
 
 # Performance Logging Utility
@@ -49,7 +50,7 @@ has_issues = (val_report['duplicates']['count'] > 0) or \
 
 if has_issues:
     with st.expander("⚠️ Data Quality Issues Detected", expanded=False):
-        tab1, tab2, tab3 = st.tabs(["Duplicates", "Missing Values", "Intraday Gaps"])
+        tab1, tab2, tab3, tab4 = st.tabs(["Duplicates", "Missing Values", "Intraday Gaps", "Missing Minutes"])
         
         with tab1:
             count = val_report['duplicates']['count']
@@ -86,6 +87,25 @@ if has_issues:
             else:
                 st.success("No intraday gaps found.")
 
+        with tab4:
+            # Check safely if missing_minutes exists (in case of cached old data, though app reload fixes this)
+            if 'missing_minutes' in val_report:
+                mm = val_report['missing_minutes']
+                if mm['count'] > 0:
+                    st.warning(f"Found {mm['count']} missing minute intervals across {mm['days_affected']} trading days.")
+                    st.caption("Trading day expected to have 391 minutes (09:30 - 16:00).")
+                    
+                    st.dataframe(mm['data'], width='stretch')
+                    
+                    st.download_button("Download Missing Minutes Report", 
+                                       mm['data'].to_csv(index=False), 
+                                       "missing_minutes_report.csv", 
+                                       "text/csv")
+                else:
+                    st.success("All trading days have complete data (391 minutes).")
+            else:
+                st.info("Validation report outdated. Please clear cache to see missing minutes.")
+
 # Auto-clean Duplicates
 if val_report['duplicates']['count'] > 0:
     original_count = len(df)
@@ -103,7 +123,7 @@ slide_thresh_type = st.sidebar.radio("Slide Threshold Type", ["percent", "value"
 
 # Calculate defaults
 if bump_thresh_type == "percent":
-    b_val, b_step = 0.05, 0.01
+    b_val, b_step = 0.34, 0.01
     b_label = "Bump Threshold (%)"
     b_help = "Minimum percentage change required (e.g., 0.05 means 0.05%)."
 else:
@@ -112,7 +132,7 @@ else:
     b_help = "Minimum price change required in dollars (e.g., 0.50 means 50 cents)."
 
 if slide_thresh_type == "percent":
-    s_val, s_step = 0.05, 0.01
+    s_val, s_step = 0.34, 0.01
     s_label = "Slide Threshold (%)"
     s_help = "Minimum percentage change required during the slide (e.g., 0.05 means 0.05%)."
 else:
@@ -120,67 +140,85 @@ else:
     s_label = "Slide Threshold (Price Difference)"
     s_help = "Minimum price change required during the slide in dollars."
 
-# Sidebar Form (Values & Execution)
-with st.sidebar.form("analysis_form"):
-    run_btn_top = st.form_submit_button("Run Analysis", type="primary", width="stretch", key="run_top")
-    
-    st.header("Bump Parameters")
-    bump_len = st.slider("Bump Length (min)", 3, 20, 5, help="Duration of the initial trend window in minutes.")
-    bump_threshold = st.number_input(b_label, min_value=0.0, value=b_val, step=b_step, format="%.2f", key=f"bump_th_{bump_thresh_type}", help=b_help)
+# Sidebar Configuration (Reactive - No Form)
+st.sidebar.header("Bump Parameters")
+bump_len = st.sidebar.slider("Bump Length (min)", 3, 20, 5, help="Duration of the initial trend window in minutes.")
+bump_threshold = st.sidebar.number_input(b_label, min_value=0.0, value=b_val, step=b_step, format="%.2f", key=f"bump_th_{bump_thresh_type}", help=b_help)
 
-    st.header("Slide Parameters")
-    slide_len = st.slider("Slide Length (min)", 3, 20, 3, help="Duration of the subsequent reaction window in minutes.")
-    slide_threshold = st.number_input(s_label, min_value=0.0, value=s_val, step=s_step, format="%.2f", key=f"slide_th_{slide_thresh_type}", help=s_help)
+st.sidebar.header("Slide Parameters")
+slide_len = st.sidebar.slider("Slide Length (min)", 3, 20, 3, help="Duration of the subsequent reaction window in minutes.")
+slide_threshold = st.sidebar.number_input(s_label, min_value=0.0, value=s_val, step=s_step, format="%.2f", key=f"slide_th_{slide_thresh_type}", help=s_help)
+
+st.sidebar.header("Filters")
+min_bump_vol = st.sidebar.number_input("Min Bump Volume", min_value=0, value=0, step=1000, help="Minimum total volume traded during the Bump period.")
+min_slide_vol = st.sidebar.number_input("Min Slide Volume", min_value=0, value=0, step=1000, help="Minimum total volume traded during the Slide period.")
+
+st.sidebar.subheader("Time of Day (Bump Start)")
+time_start = st.sidebar.time_input("Start Time", time(9, 30), help="Only include patterns starting after this time.")
+time_end = st.sidebar.time_input("End Time", time(16, 0), help="Only include patterns starting before this time.")
+
+st.sidebar.subheader("Date Filters")
+
+# Year Selection (Excel-style)
+all_years = sorted(df['date'].dt.year.unique())
+# Use sidebar context for the custom component
+with st.sidebar:
+    selected_years = render_checkbox_dropdown("Years", all_years, "filter_year")
     
-    st.header("Filters")
-    min_bump_vol = st.number_input("Min Bump Volume", min_value=0, value=0, step=1000, help="Minimum total volume traded during the Bump period.")
-    min_slide_vol = st.number_input("Min Slide Volume", min_value=0, value=0, step=1000, help="Minimum total volume traded during the Slide period.")
-    
-    st.subheader("Time of Day (Bump Start)")
-    time_start = st.time_input("Start Time", time(9, 30), help="Only include patterns starting after this time.")
-    time_end = st.time_input("End Time", time(16, 0), help="Only include patterns starting before this time.")
-    
-    st.subheader("Day of Week")
-    days = []
+    # Day Selection (Excel-style)
     days_options = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
-    for day in days_options:
-        if st.checkbox(day, value=True, key=f"check_{day}"):
-            days.append(day)
+    days = render_checkbox_dropdown("Days of Week", days_options, "filter_day")
 
 # Show Debug Logs in Sidebar
 with st.sidebar.expander("Debug Profiling", expanded=False):
     if 'perf_logs' in st.session_state:
         st.code("\n".join(st.session_state.perf_logs))
 
-# Run Logic
-if run_btn_top:
-    t_analysis_start = time_module.time()
-    
-    # Progress UI Elements (Centered at top of main area)
-    prog_bar = st.progress(0)
-    status_text = st.empty()
-    
-    def update_progress(msg, percent):
-        prog_bar.progress(percent)
-        status_text.markdown(f"**{msg}**")
+# Apply Filters to Dataframe globally (for Analysis and Viz consistency)
+# We must reset index so that results indices match the dataframe passed to Viz
+if len(selected_years) < len(all_years):
+    df_filtered = df[df['date'].dt.year.isin(selected_years)].reset_index(drop=True)
+else:
+    df_filtered = df.copy() # Copy to be safe if we modify it later (though we don't)
 
+# Run Logic (Reactive)
+t_analysis_start = time_module.time()
+
+# Only run if we have data selected
+if len(selected_years) > 0 and len(days) > 0:
     results = find_bumps_and_slides(
-        df,
+        df_filtered,
         bump_len, bump_threshold, bump_thresh_type,
         slide_len, slide_threshold, slide_thresh_type,
         min_bump_vol=min_bump_vol,
         min_slide_vol=min_slide_vol,
         time_range=(time_start, time_end),
         days_of_week=days,
-        progress_callback=update_progress
+        # No progress bar needed for instant reactive updates unless slow
     )
-    
-    # Clear progress after completion
-    prog_bar.empty()
-    status_text.empty()
-    
     st.session_state.results = results
-    log_perf("Full Analysis", t_analysis_start)
+    
+    # Pre-select specific row if first run or requested
+    # Target: 2020-04-06 13:53:00
+    if 'preselected_done' not in st.session_state and not results.empty:
+        # Search for the target date
+        target_timestamp = pd.Timestamp("2020-04-06 13:53:00")
+        matches = results[results['date'] == target_timestamp]
+        
+        if not matches.empty:
+            target_idx = matches.index[0]
+            st.session_state.selected_match_idx = target_idx
+            st.session_state.preselected_done = True
+            # We might need to rerun to reflect the selection immediately
+            # But since we are inside the run logic, the selection logic below will pick it up
+        else:
+            # Mark as done so we don't keep trying
+            st.session_state.preselected_done = True
+
+else:
+    st.session_state.results = pd.DataFrame() # Empty if no filters
+
+log_perf("Full Analysis", t_analysis_start)
 
 # Display Results
 if st.session_state.results is not None:
@@ -190,29 +228,65 @@ if st.session_state.results is not None:
     if not results.empty:
         st.subheader("Visualize Pattern")
         
-        t_options_start = time_module.time()
-        # Optimize Selectbox: Pre-calculate labels vectorized
-        # Create a dictionary map for O(1) lookup
-        labels = (
-            results['date'].astype(str) + 
-            " | Bump: " + results['bump_change'].map('{:,.2f}'.format) + 
-            " | Slide: " + results['slide_change'].map('{:,.2f}'.format)
+        # Initialize match_idx from session state if available (from table selection)
+        # Default to first match if nothing selected
+        if 'selected_match_idx' not in st.session_state:
+            st.session_state.selected_match_idx = results.index[0] if not results.empty else None
+        
+        # Ensure the selected index is valid for current results
+        # If the filtered results change, the old selection might be gone. Reset to first.
+        if st.session_state.selected_match_idx not in results.index and not results.empty:
+            st.session_state.selected_match_idx = results.index[0]
+
+        match_idx = st.session_state.selected_match_idx
+
+        st.subheader("Matches")
+        st.caption("Click a row to visualize it.")
+        
+        # Interactive Table
+        # We explicitly configure columns to ensure sorting is enabled and intuitive
+        event = st.dataframe(
+            results, 
+            width="stretch",
+            on_select="rerun",
+            selection_mode="single-row",
+            key="matches_table", # Stable key to preserve sort state across reruns
+            column_config={
+                "date": st.column_config.DatetimeColumn("Date", format="YYYY-MM-DD HH:mm"),
+                "bump_change": st.column_config.NumberColumn("Bump Change", format="%.2f"),
+                "slide_change": st.column_config.NumberColumn("Slide Change", format="%.2f"),
+                "bump_vol": st.column_config.NumberColumn("Bump Vol"),
+                "slide_vol": st.column_config.NumberColumn("Slide Vol"),
+            },
+            hide_index=True # Cleaner UI, user sorts by columns
         )
-        label_dict = labels.to_dict()
-        log_perf("Selectbox: Labels Generated", t_options_start)
         
-        def format_func(idx):
-            return label_dict[idx]
-        
-        col1, col2 = st.columns([1, 2])
-        
-        with col1:
-            match_idx = st.selectbox("Select Match", results.index, format_func=format_func)
+        # Handle Table Selection
+        if len(event.selection.rows) > 0:
+            selected_row_numeric_idx = event.selection.rows[0]
+            new_idx = results.index[selected_row_numeric_idx]
+            if new_idx != st.session_state.selected_match_idx:
+                st.session_state.selected_match_idx = new_idx
+                st.rerun()
+
+        # Render Visualization if we have a selection
+        if match_idx is not None and match_idx in results.index:
+            st.divider() # Separation
             
-            if match_idx is not None and match_idx in results.index:
-                row = results.loc[match_idx]
+            col1, col2 = st.columns([1, 2])
+            
+            row = results.loc[match_idx]
+            
+            with col1:
+                # --- Match Details & News ---
+                st.subheader(f"Date: {row['date'].date()}")
+                st.metric("Bump Change", f"{row['bump_change']:.2f}%")
+                st.metric("Slide Change", f"{row['slide_change']:.2f}%")
+                
+                st.divider()
+                
                 # --- News Section ---
-                with st.expander("📰 Market News for " + str(row['date'].date()), expanded=False):
+                with st.expander("📰 Market News", expanded=True):
                     news_date_str = str(row['date'].date())
                     
                     search_topic = st.selectbox(
@@ -224,11 +298,11 @@ if st.session_state.results is not None:
                     
                     fallback_url = get_google_news_url(news_date_str, search_topic)
                     
-                    st.markdown(f"### [🔍 Search Google News for '{search_topic}' ({news_date_str})]({fallback_url})")
-                    st.caption("Opens a new tab with Google News search results filtered to this specific date.")
-        
-        with col2:
-            if match_idx is not None and match_idx in results.index:
+                    st.markdown(f"### [🔍 Search Google News]({fallback_url})")
+                    st.caption(f"Topic: {search_topic} | Date: {news_date_str}")
+
+            with col2:
+                # --- Chart Visualization ---
                 t_viz_start = time_module.time()
                 
                 # Use a placeholder for the chart area
@@ -236,12 +310,12 @@ if st.session_state.results is not None:
                 
                 # Show explicit loading state in the container
                 with chart_container.container():
-                    st.info("⏳ **Generating visualization...**\n\nProcessing chart data, please wait...", icon="⏳")
+                    st.info("⏳ **Generating visualization...**", icon="⏳")
                 
                 try:
                     t_prep_start = time_module.time()
-                    row = results.loc[match_idx]
-                    fig = plot_pattern(df, row, bump_len=bump_len, slide_len=slide_len)
+                    # Use df_filtered to match the indices in results
+                    fig = plot_pattern(df_filtered, row, bump_len=bump_len, slide_len=slide_len)
                     log_perf("Viz: Pattern Generation", t_prep_start)
                     
                     t_render_start = time_module.time()
@@ -254,8 +328,6 @@ if st.session_state.results is not None:
                 except Exception as e:
                     chart_container.error(f"Error loading visualization: {str(e)}")
 
-        st.subheader("Matches")
-        st.dataframe(results, width="stretch")
     else:
         st.info("No matches found with current parameters.")
 
