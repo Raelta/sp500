@@ -5,9 +5,7 @@ A Python application designed to analyze intraday SPY (S&P 500 ETF) data for "Bu
 ## Features
 
 - **Pattern Detection**: Automatically identifies "Bump" (initial trend) and "Slide" (subsequent reaction) patterns based on user-defined criteria.
-- **Dual Interfaces**: 
-  - **Web Dashboard**: Interactive Streamlit app with Plotly visualizations.
-  - **CLI**: Command-line tool for scriptable analysis and text-based reporting.
+- **Interactive Dashboard**: Powerful Streamlit app with reactive analysis and Plotly visualizations.
 - **Smart Filtering**: 
   - Excel-style "Select All" filters for Years and Days of the Week.
   - Filter by Volume, Time of Day, and Days.
@@ -33,42 +31,43 @@ A Python application designed to analyze intraday SPY (S&P 500 ETF) data for "Bu
 
 ## Usage
 
-### Streamlit Dashboard (Web App)
+### Web Dashboard
 
 The dashboard offers the best experience for exploring data and visualizing patterns.
 
 ```bash
 streamlit run app.py
 ```
+
 *   **Filters**: Use the sidebar to set Year/Day filters and Adjust parameters.
 *   **Analysis**: The app updates reactively.
 *   **Selection**: Click any row in the **Matches Table** to view the visualization. Click column headers to sort.
 *   **Layout**: Use the "App Layout" toggle to customize your workspace.
 
-### Command Line Interface (CLI)
+#### Command Line Overrides
 
-Use the CLI for quick checks or batch processing.
+You can launch the app with custom parameter defaults using command-line arguments. Append your flags after a `--` separator.
 
-**Basic Run (Default Settings):**
+**Example:**
 ```bash
-python cli.py
+# Set Bump Length to 10 minutes and Threshold to 0.1%
+streamlit run app.py -- --bump-len 10 --bump-thresh 0.1
 ```
 
-**Custom Configuration:**
-```bash
-python cli.py --bump-len 10 --bump-thresh 0.1 --slide-len 5 --slide-thresh 0.05
-```
-
-**Full Help:**
-```bash
-python cli.py --help
-```
+**Supported Flags:**
+- `-bl`, `--bump-len`: Bump Length (min)
+- `-bt`, `--bump-thresh`: Bump Threshold
+- `--bump-type`: 'percent' or 'value'
+- `-sl`, `--slide-len`: Slide Length (min)
+- `-st`, `--slide-thresh`: Slide Threshold
+- `--slide-type`: 'percent' or 'value'
+- `--min-bump-vol`: Min Bump Volume
+- `--min-slide-vol`: Min Slide Volume
 
 ## Project Structure
 
 ```
 ├── app.py                  # Main Streamlit application entry point
-├── cli.py                  # Command Line Interface entry point
 ├── requirements.txt        # Python dependencies
 ├── spy_data.parquet        # Default dataset (SPY Intraday Data)
 ├── src/

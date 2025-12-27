@@ -6,8 +6,31 @@ from src.analyzer import find_bumps_and_slides
 from src.visualizer import plot_pattern
 from src.data_validator import validate_dataset, get_yearly_duplicate_summary
 from src.news_provider import get_google_news_url
-from src.ui_utils import render_checkbox_dropdown
+from src.ui_utils import render_checkbox_dropdown, get_app_version
 from datetime import time
+import argparse
+import sys
+
+# Parse CLI Args to Override Defaults
+def get_cli_args():
+    parser = argparse.ArgumentParser(description="SP500 Bump & Slide App")
+    # Use ignore_unknown to allow streamlit args if any leak
+    parser.add_argument("-bl", "--bump-len", type=int, help="Bump length (min)")
+    parser.add_argument("-bt", "--bump-thresh", type=float, help="Bump threshold")
+    parser.add_argument("--bump-type", choices=["percent", "value"], help="Bump threshold type")
+    
+    parser.add_argument("-sl", "--slide-len", type=int, help="Slide length (min)")
+    parser.add_argument("-st", "--slide-thresh", type=float, help="Slide threshold")
+    parser.add_argument("--slide-type", choices=["percent", "value"], help="Slide threshold type")
+    
+    parser.add_argument("--min-bump-vol", type=int, help="Min Bump Volume")
+    parser.add_argument("--min-slide-vol", type=int, help="Min Slide Volume")
+    
+    # We use parse_known_args to avoid issues with Streamlit's own flags
+    args, _ = parser.parse_known_args()
+    return args
+
+cli_args = get_cli_args()
 
 # Performance Logging Utility
 def log_perf(label, start_time):
@@ -115,11 +138,32 @@ if val_report['duplicates']['count'] > 0:
 # Initialize Session State
 if 'results' not in st.session_state:
     st.session_state.results = None
+if 'stats' not in st.session_state:
+    st.session_state.stats = None
+
+# Sidebar: Global Controls
+if st.sidebar.button("🔄 Reload Data", help="Clear cache and force reload from disk"):
+    st.cache_data.clear()
+    # Clear session state to ensure fresh analysis
+    for key in ['results', 'selected_match_idx', 'preselected_done']:
+        if key in st.session_state:
+            del st.session_state[key]
+    st.rerun()
 
 # Sidebar Configuration (Types outside form for interactivity)
 st.sidebar.header("Configuration")
-bump_thresh_type = st.sidebar.radio("Bump Threshold Type", ["percent", "value"], index=0, help="Choose 'percent' for relative change (%) or 'value' for absolute price difference.")
-slide_thresh_type = st.sidebar.radio("Slide Threshold Type", ["percent", "value"], index=0, help="Choose 'percent' for relative change (%) or 'value' for absolute price difference.")
+
+# CLI Overrides for Types
+bt_idx = 0
+if cli_args.bump_type:
+    bt_idx = 0 if cli_args.bump_type == "percent" else 1
+
+st_idx = 0
+if cli_args.slide_type:
+    st_idx = 0 if cli_args.slide_type == "percent" else 1
+
+bump_thresh_type = st.sidebar.radio("Bump Threshold Type", ["percent", "value"], index=bt_idx, help="Choose 'percent' for relative change (%) or 'value' for absolute price difference.")
+slide_thresh_type = st.sidebar.radio("Slide Threshold Type", ["percent", "value"], index=st_idx, help="Choose 'percent' for relative change (%) or 'value' for absolute price difference.")
 
 # Calculate defaults
 if bump_thresh_type == "percent":
@@ -131,6 +175,10 @@ else:
     b_label = "Bump Threshold (Price Difference)"
     b_help = "Minimum price change required in dollars (e.g., 0.50 means 50 cents)."
 
+# CLI Override for Bump Threshold
+if cli_args.bump_thresh is not None:
+    b_val = cli_args.bump_thresh
+
 if slide_thresh_type == "percent":
     s_val, s_step = 0.34, 0.01
     s_label = "Slide Threshold (%)"
@@ -140,18 +188,33 @@ else:
     s_label = "Slide Threshold (Price Difference)"
     s_help = "Minimum price change required during the slide in dollars."
 
+# CLI Override for Slide Threshold
+if cli_args.slide_thresh is not None:
+    s_val = cli_args.slide_thresh
+
 # Sidebar Configuration (Reactive - No Form)
 st.sidebar.header("Bump Parameters")
-bump_len = st.sidebar.slider("Bump Length (min)", 3, 20, 5, help="Duration of the initial trend window in minutes.")
-bump_threshold = st.sidebar.number_input(b_label, min_value=0.0, value=b_val, step=b_step, format="%.2f", key=f"bump_th_{bump_thresh_type}", help=b_help)
+
+# CLI Override for Bump Length
+b_len_default = cli_args.bump_len if cli_args.bump_len is not None else 5
+bump_len = st.sidebar.slider("Bump Length (min)", 3, 20, b_len_default, help="Duration of the initial trend window in minutes.")
+bump_threshold = st.sidebar.number_input(b_label, min_value=0.0, value=float(b_val), step=b_step, format="%.2f", key=f"bump_th_{bump_thresh_type}", help=b_help)
 
 st.sidebar.header("Slide Parameters")
-slide_len = st.sidebar.slider("Slide Length (min)", 3, 20, 3, help="Duration of the subsequent reaction window in minutes.")
-slide_threshold = st.sidebar.number_input(s_label, min_value=0.0, value=s_val, step=s_step, format="%.2f", key=f"slide_th_{slide_thresh_type}", help=s_help)
+
+# CLI Override for Slide Length
+s_len_default = cli_args.slide_len if cli_args.slide_len is not None else 3
+slide_len = st.sidebar.slider("Slide Length (min)", 1, 20, s_len_default, help="Duration of the subsequent reaction window in minutes.")
+slide_threshold = st.sidebar.number_input(s_label, min_value=0.0, value=float(s_val), step=s_step, format="%.2f", key=f"slide_th_{slide_thresh_type}", help=s_help)
 
 st.sidebar.header("Filters")
-min_bump_vol = st.sidebar.number_input("Min Bump Volume", min_value=0, value=0, step=1000, help="Minimum total volume traded during the Bump period.")
-min_slide_vol = st.sidebar.number_input("Min Slide Volume", min_value=0, value=0, step=1000, help="Minimum total volume traded during the Slide period.")
+
+# CLI Override for Filters
+mbv_default = cli_args.min_bump_vol if cli_args.min_bump_vol is not None else 0
+msv_default = cli_args.min_slide_vol if cli_args.min_slide_vol is not None else 0
+
+min_bump_vol = st.sidebar.number_input("Min Bump Volume", min_value=0, value=mbv_default, step=1000, help="Minimum total volume traded during the Bump period.")
+min_slide_vol = st.sidebar.number_input("Min Slide Volume", min_value=0, value=msv_default, step=1000, help="Minimum total volume traded during the Slide period.")
 
 st.sidebar.subheader("Time of Day (Bump Start)")
 time_start = st.sidebar.time_input("Start Time", time(9, 30), help="Only include patterns starting after this time.")
@@ -177,6 +240,12 @@ with st.sidebar.expander("Debug Profiling", expanded=False):
     if 'perf_logs' in st.session_state:
         st.code("\n".join(st.session_state.perf_logs))
 
+# Version Info
+st.sidebar.divider()
+ver = get_app_version()
+st.sidebar.markdown(f"**Version:** v0.1.{ver['count']} ({ver['hash']})")
+st.sidebar.markdown(f"**Date:** {ver['date']}")
+
 # Apply Filters to Dataframe globally (for Analysis and Viz consistency)
 # We must reset index so that results indices match the dataframe passed to Viz
 if len(selected_years) < len(all_years):
@@ -189,7 +258,7 @@ t_analysis_start = time_module.time()
 
 # Only run if we have data selected
 if len(selected_years) > 0 and len(days) > 0:
-    results = find_bumps_and_slides(
+    results, stats = find_bumps_and_slides(
         df_filtered,
         bump_len, bump_threshold, bump_thresh_type,
         slide_len, slide_threshold, slide_thresh_type,
@@ -200,6 +269,7 @@ if len(selected_years) > 0 and len(days) > 0:
         # No progress bar needed for instant reactive updates unless slow
     )
     st.session_state.results = results
+    st.session_state.stats = stats
     
     # Pre-select specific row if first run or requested
     # Target: 2020-04-06 13:53:00
@@ -220,8 +290,19 @@ if len(selected_years) > 0 and len(days) > 0:
 
 else:
     st.session_state.results = pd.DataFrame() # Empty if no filters
+    st.session_state.stats = None
 
 log_perf("Full Analysis", t_analysis_start)
+
+# Display Stats (Hit Rate)
+if st.session_state.stats:
+    stats = st.session_state.stats
+    with st.expander("📊 Pattern Statistics (Hit Rate)", expanded=True):
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("Total Bumps", stats['total_bumps'], help="Candidates matching Bump criteria")
+        col2.metric("Hits (Valid)", stats['hits'], help="Bumps followed by matching Slide")
+        col3.metric("Misses", stats['misses'], help="Bumps NOT followed by matching Slide")
+        col4.metric("Conversion Rate", f"{stats['hit_ratio']:.1f}%", help="Percentage of bumps that become valid patterns")
 
 # Display Results
 if st.session_state.results is not None:
@@ -242,9 +323,9 @@ if st.session_state.results is not None:
                 selection_mode="single-row",
                 key="matches_table", # Stable key to preserve sort state across reruns
                 column_config={
-                    "date": st.column_config.DatetimeColumn("Date", format="YYYY-MM-DD HH:mm"),
-                    "bump_change": st.column_config.NumberColumn("Bump Change", format="%.2f"),
-                    "slide_change": st.column_config.NumberColumn("Slide Change", format="%.2f"),
+                    "date": st.column_config.DatetimeColumn("Bump Start", format="YYYY-MM-DD HH:mm"),
+                    "bump_change": st.column_config.NumberColumn("Bump Change %", format="%.2f"),
+                    "slide_change": st.column_config.NumberColumn("Slide Change %", format="%.2f"),
                     "bump_vol": st.column_config.NumberColumn("Bump Vol"),
                     "slide_vol": st.column_config.NumberColumn("Slide Vol"),
                 },
@@ -294,10 +375,9 @@ if st.session_state.results is not None:
                     # Compact News Controls
                     news_date_str = str(row['date'].date())
                     # Using a simpler layout for news to save vertical space
-                    search_topic = st.selectbox(
+                    search_topic = st.text_input(
                         "News Topic", 
-                        ["S&P 500", "SPY", "Stock Market", "Economy", "Finance"],
-                        index=0,
+                        value="S&P 500",
                         label_visibility="collapsed" # Save space, label implied
                     )
                     fallback_url = get_google_news_url(news_date_str, search_topic)

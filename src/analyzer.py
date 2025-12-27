@@ -58,7 +58,7 @@ def find_bumps_and_slides(
     bump_close = df['close'].shift(-(bump_len - 1))
     bump_change = calculate_change(bump_open, bump_close, bump_thresh_type)
     
-    # Slide Change
+    # Slide Change %
     slide_open = df['open'].shift(-bump_len)
     slide_close = df['close'].shift(-(bump_len + slide_len - 1))
     slide_change = calculate_change(slide_open, slide_close, slide_thresh_type)
@@ -78,42 +78,53 @@ def find_bumps_and_slides(
         'slide_start_price': slide_open,
         'slide_end_price': slide_close,
         'bump_end_date': df['date'].shift(-(bump_len - 1)),
+        'slide_start_date': df['date'].shift(-bump_len),
         'slide_end_date': df['date'].shift(-(bump_len + slide_len - 1))
     })
     
-    # 4. Filter by Thresholds and Volume
-    if progress_callback: progress_callback("Filtering candidates...", 70)
-
-    mask = (
-        (candidates['bump_change'].abs() >= bump_threshold) &
-        (candidates['slide_change'].abs() >= slide_threshold) &
-        (candidates['bump_vol'] >= min_bump_vol) &
-        (candidates['slide_vol'] >= min_slide_vol)
-    )
+    # 3.5 Apply Time and Day Filters (Moved before threshold filtering to calculate stats on valid scope)
+    if progress_callback: progress_callback("Applying time and day filters...", 60)
     
-    results = candidates[mask].copy()
-    
-    # 5. Filter by Time and Day
-    if not results.empty:
-        if progress_callback: progress_callback("Applying time and day filters...", 85)
-
+    if not candidates.empty:
         # Time of Day (based on Bump Start)
         if time_range:
             start_t, end_t = time_range
-            results_times = results['date'].dt.time
+            results_times = candidates['date'].dt.time
             # Handle overnight ranges if needed, but assuming intraday for now
             if start_t <= end_t:
-                results = results[(results_times >= start_t) & (results_times <= end_t)]
+                candidates = candidates[(results_times >= start_t) & (results_times <= end_t)]
             else:
-                # Overnight
-                results = results[(results_times >= start_t) | (results_times <= end_t)]
+                candidates = candidates[(results_times >= start_t) | (results_times <= end_t)]
         
         # Day of Week
         if days_of_week:
             # days_of_week expected to be list of day names (Mon, Tue...) or integers
             # Let's standardize on day_name()
-            results = results[results['date'].dt.day_name().isin(days_of_week)]
+            candidates = candidates[candidates['date'].dt.day_name().isin(days_of_week)]
+
+    # 4. Filter by Thresholds and Volume
+    if progress_callback: progress_callback("Filtering candidates...", 70)
+
+    if candidates.empty:
+         return pd.DataFrame(), {'total_bumps': 0, 'hits': 0, 'misses': 0, 'hit_ratio': 0}
+
+    # Calculate masks
+    bump_mask = (candidates['bump_change'].abs() >= bump_threshold) & (candidates['bump_vol'] >= min_bump_vol)
+    slide_mask = (candidates['slide_change'].abs() >= slide_threshold) & (candidates['slide_vol'] >= min_slide_vol)
+    
+    total_bumps = bump_mask.sum()
+    hits = (bump_mask & slide_mask).sum()
+    misses = (bump_mask & ~slide_mask).sum()
+    
+    stats = {
+        'total_bumps': int(total_bumps),
+        'hits': int(hits),
+        'misses': int(misses),
+        'hit_ratio': float((hits / total_bumps * 100) if total_bumps > 0 else 0)
+    }
+
+    results = candidates[bump_mask & slide_mask].copy()
 
     if progress_callback: progress_callback("Finalizing results...", 100)
     
-    return results.dropna()
+    return results.dropna(), stats

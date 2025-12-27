@@ -1,4 +1,25 @@
 import streamlit as st
+import subprocess
+
+def get_app_version():
+    """
+    Returns a dictionary with version info: hash, count, date.
+    """
+    try:
+        short_hash = subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD']).decode('ascii').strip()
+        count = subprocess.check_output(['git', 'rev-list', '--count', 'HEAD']).decode('ascii').strip()
+        date = subprocess.check_output(['git', 'show', '-s', '--format=%cd', '--date=format:%Y-%m-%d %H:%M', 'HEAD']).decode('ascii').strip()
+        return {
+            "hash": short_hash,
+            "count": count,
+            "date": date
+        }
+    except Exception:
+        return {
+            "hash": "Unknown",
+            "count": "0",
+            "date": "Unknown"
+        }
 
 def render_checkbox_dropdown(label, options, key_prefix, default_all=True):
     """

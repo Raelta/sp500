@@ -1,15 +1,11 @@
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import pandas as pd
+import numpy as np
 
 def plot_pattern(df, match_row, padding=10, bump_len=None, slide_len=None):
     """
-    Plots a specific pattern (Bump + Slide) with context.
-    
-    match_row: A Series from the results DataFrame (must have name as original index)
-    df: The full dataframe (for context)
-    padding: Number of bars before and after to show
-    bump_len: Length of bump (optional, for optimization)
-    slide_len: Length of slide (optional, for optimization)
+    Plots a specific pattern (Bump + Slide) with context using subplots for Price and Volume.
     """
     
     # We use the index from match_row to find location in df
@@ -23,7 +19,6 @@ def plot_pattern(df, match_row, padding=10, bump_len=None, slide_len=None):
     else:
         # Fallback: Find index of slide_end_date using search
         slide_end_date = match_row['slide_end_date']
-        import numpy as np
         end_pos = np.searchsorted(df['date'], slide_end_date)
         if end_pos >= len(df): end_pos = len(df) - 1
     
@@ -32,20 +27,46 @@ def plot_pattern(df, match_row, padding=10, bump_len=None, slide_len=None):
     
     plot_data = df.iloc[plot_start_idx : plot_end_idx + 1]
     
-    fig = go.Figure()
+    # Create Subplots: Price (Top), Volume (Bottom)
+    fig = make_subplots(
+        rows=2, cols=1, 
+        shared_xaxes=True, 
+        vertical_spacing=0.05, 
+        row_heights=[0.7, 0.3]
+    )
     
-    # Candlestick
+    # 1. Candlestick (Wickless: line width 0)
     fig.add_trace(go.Candlestick(
         x=plot_data['date'],
         open=plot_data['open'],
         high=plot_data['high'],
         low=plot_data['low'],
         close=plot_data['close'],
-        name='Price'
-    ))
+        name='Price',
+        increasing_line=dict(width=0), # Hide wicks
+        decreasing_line=dict(width=0), # Hide wicks
+    ), row=1, col=1)
     
-    # Highlight Bump
-    # From start_date to bump_end_date
+    # 2. Volume Bar
+    # Color volume bars based on close >= open (standard trading convention)
+    colors = ['#00CC96' if c >= o else '#EF553B' for c, o in zip(plot_data['close'], plot_data['open'])]
+    
+    fig.add_trace(go.Bar(
+        x=plot_data['date'],
+        y=plot_data['volume'],
+        name='Volume',
+        marker_color=colors
+    ), row=2, col=1)
+    
+    # Highlights (vrect adds to all shared axes by default usually, but we want it clear)
+    # We add it to the figure, it generally spans the plot area
+    
+    actual_max_date = plot_data['date'].max()
+    slide_end = match_row['slide_end_date']
+    if slide_end > actual_max_date:
+        slide_end = actual_max_date
+
+    # Bump Rect
     fig.add_vrect(
         x0=match_row['date'], x1=match_row['bump_end_date'],
         fillcolor="rgba(255, 165, 0, 0.3)", # Orange
@@ -53,21 +74,9 @@ def plot_pattern(df, match_row, padding=10, bump_len=None, slide_len=None):
         annotation_text="Bump", annotation_position="top left"
     )
     
-    # Highlight Slide
-    # From bump_end_date to slide_end_date
-    # Important: Check if slide_end_date actually exists in the plot range.
-    # If data is missing (e.g. market closed early or gap), plotting a rectangle to a future non-existent date 
-    # causes Plotly to extend the x-axis into empty space.
-    
-    actual_max_date = plot_data['date'].max()
-    slide_end = match_row['slide_end_date']
-    
-    # Clip the slide highlight to the actual available data to avoid empty whitespace
-    if slide_end > actual_max_date:
-        slide_end = actual_max_date
-        
+    # Slide Rect
     fig.add_vrect(
-        x0=match_row['bump_end_date'], x1=slide_end,
+        x0=match_row['slide_start_date'], x1=slide_end,
         fillcolor="rgba(0, 0, 255, 0.3)", # Blue
         layer="below", line_width=0,
         annotation_text="Slide", annotation_position="top left"
@@ -75,7 +84,12 @@ def plot_pattern(df, match_row, padding=10, bump_len=None, slide_len=None):
     
     fig.update_layout(
         title=f"Pattern starting {start_date}",
-        xaxis_rangeslider_visible=False,
-        height=500
+        height=600,
+        showlegend=False,
+        margin=dict(l=50, r=50, t=50, b=50)
     )
+    
+    # Disable range slider
+    fig.update_xaxes(rangeslider_visible=False)
+    
     return fig

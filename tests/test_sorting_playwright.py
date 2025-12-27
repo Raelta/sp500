@@ -22,18 +22,18 @@ def test_table_sorting():
         
         # Find the "Bump Change" header
         # This selector is fragile but common for Streamlit tables
-        header = page.get_by_text("Bump Change", exact=True)
+        header = page.get_by_text("Bump Change %", exact=True)
         
         if not header.count():
-            print("FAIL: Could not find 'Bump Change' header.")
+            print("FAIL: Could not find 'Bump Change %' header.")
             return
 
         # Click header to sort
-        print("Clicking 'Bump Change' header...")
+        print("Clicking 'Bump Change %' header...")
         header.click()
         page.wait_for_timeout(2000)
         
-        # Get first row content (Bump Change value)
+        # Get first row content (Bump Change %value)
         # We need to find the cells in the column. 
         # This requires traversing the grid structure which is complex in canvas/arrow based st.dataframe.
         
