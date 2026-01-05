@@ -48,38 +48,56 @@ def plot_pattern(df, match_row, padding=10, bump_len=None, slide_len=None):
     ), row=1, col=1)
     
     # 2. Volume Bar
-    # Color volume bars based on close >= open (standard trading convention)
-    colors = ['#00CC96' if c >= o else '#EF553B' for c, o in zip(plot_data['close'], plot_data['open'])]
-    
+    # Mono color for volume as requested
     fig.add_trace(go.Bar(
         x=plot_data['date'],
         y=plot_data['volume'],
         name='Volume',
-        marker_color=colors
+        marker_color='#7F7F7F' 
     ), row=2, col=1)
     
-    # Highlights (vrect adds to all shared axes by default usually, but we want it clear)
-    # We add it to the figure, it generally spans the plot area
+    # Highlights
     
     actual_max_date = plot_data['date'].max()
     slide_end = match_row['slide_end_date']
     if slide_end > actual_max_date:
         slide_end = actual_max_date
 
-    # Bump Rect
+    # Visually extend the rectangles by 1 minute so they cover the full width of the last bar
+    vis_offset = pd.Timedelta(minutes=1)
+
+    # Bump Rect - Price (With Annotation)
     fig.add_vrect(
-        x0=match_row['date'], x1=match_row['bump_end_date'],
+        x0=match_row['date'], x1=match_row['bump_end_date'] + vis_offset,
         fillcolor="rgba(255, 165, 0, 0.3)", # Orange
         layer="below", line_width=0,
-        annotation_text="Bump", annotation_position="top left"
+        annotation_text="Bump", annotation_position="top left",
+        row=1, col=1
     )
     
-    # Slide Rect
+    # Bump Rect - Volume (No Annotation)
     fig.add_vrect(
-        x0=match_row['slide_start_date'], x1=slide_end,
+        x0=match_row['date'], x1=match_row['bump_end_date'] + vis_offset,
+        fillcolor="rgba(255, 165, 0, 0.3)", # Orange
+        layer="below", line_width=0,
+        row=2, col=1
+    )
+    
+    # Slide Rect - Price (With Annotation)
+    fig.add_vrect(
+        x0=match_row['slide_start_date'], x1=slide_end + vis_offset,
         fillcolor="rgba(0, 0, 255, 0.3)", # Blue
         layer="below", line_width=0,
-        annotation_text="Slide", annotation_position="top left"
+        annotation_text="Slide", annotation_position="top left",
+        row=1, col=1
+    )
+    
+    # Slide Rect - Volume (No Annotation)
+    fig.add_vrect(
+        x0=match_row['slide_start_date'], x1=slide_end + vis_offset,
+        fillcolor="rgba(0, 0, 255, 0.3)", # Blue
+        layer="below", line_width=0,
+        row=2, col=1
     )
     
     fig.update_layout(
