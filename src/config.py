@@ -21,6 +21,9 @@ def get_cli_args():
     parser.add_argument("--min-bump-vol", type=int, help="Min Bump Volume")
     parser.add_argument("--min-slide-vol", type=int, help="Min Slide Volume")
     
+    parser.add_argument("--bump-up-pct", type=float, help="Min % Up Candles in Bump")
+    parser.add_argument("--slide-up-pct", type=float, help="Min % Up Candles in Slide")
+
     # We use parse_known_args to avoid issues with Streamlit's own flags
     # This allows passing arguments like `streamlit run app.py -- --bump-len 10`
     args, _ = parser.parse_known_args()

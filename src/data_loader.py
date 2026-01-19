@@ -20,4 +20,15 @@ def load_data_cached(filepath="spy_data.parquet"):
     """
     df = load_data_uncached(filepath)
     val_report = validate_dataset(df)
+    
+    # Calculate Yearly Average SizeVol
+    # SizeVol = Volume * |Close - Open|
+    # We do this here to avoid recomputing on every rerun
+    if not df.empty:
+        size_vol = df['volume'] * (df['close'] - df['open']).abs()
+        yearly_avgs = size_vol.groupby(df['date'].dt.year).mean().to_dict()
+        val_report['yearly_size_vol'] = yearly_avgs
+    else:
+        val_report['yearly_size_vol'] = {}
+        
     return df, val_report

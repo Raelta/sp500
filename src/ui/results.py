@@ -3,18 +3,9 @@ import pandas as pd
 import time as time_module
 from src.visualizer import plot_pattern
 from src.news_provider import get_google_news_url
+from src.ui.utils import log_perf
 
-def log_perf(label, start_time):
-    # Helper to log performance (or we can pass the logger)
-    duration = time_module.time() - start_time
-    msg = f"[PERF] {label}: {duration:.4f}s"
-    print(msg)
-    if 'perf_logs' not in st.session_state:
-        st.session_state.perf_logs = []
-    st.session_state.perf_logs.append(msg)
-    return time_module.time()
-
-def render_results(results, stats, config, df_filtered):
+def render_results(results, stats, config, df_filtered, val_report=None):
     """
     Renders the analysis results, including statistics, table, and charts.
     
@@ -23,6 +14,7 @@ def render_results(results, stats, config, df_filtered):
         stats: Dictionary of hit/miss statistics.
         config: Configuration dict from sidebar.
         df_filtered: The filtered source dataframe (for plotting).
+        val_report: Validation report dictionary (optional, used for yearly stats).
     """
     layout_order = config['layout_order']
     bump_len = config['bump_len']
@@ -125,8 +117,21 @@ def render_results(results, stats, config, df_filtered):
                 
                 try:
                     t_prep_start = time_module.time()
+                    
+                    # Calculate Average SizeVol for the year
+                    avg_sv = 0
+                    if val_report and 'yearly_size_vol' in val_report:
+                        year = row['date'].year
+                        avg_sv = val_report['yearly_size_vol'].get(year, 0)
+                        
                     # Use df_filtered to match the indices in results
-                    fig = plot_pattern(df_filtered, row, bump_len=bump_len, slide_len=slide_len)
+                    fig = plot_pattern(
+                        df_filtered, 
+                        row, 
+                        bump_len=bump_len, 
+                        slide_len=slide_len,
+                        avg_size_vol=avg_sv
+                    )
                     log_perf("Viz: Pattern Generation", t_prep_start)
                     
                     t_render_start = time_module.time()

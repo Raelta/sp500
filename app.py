@@ -109,12 +109,27 @@ if val_report['duplicates']['count'] > 0:
     st.info(f"🧹 Auto-cleaned data: Removed {original_count - len(df)} duplicate rows. Analysis will proceed on {len(df)} unique rows.")
 
 # Sidebar Render
-# Returns config dictionary with all parameters
+# Returns config dictionary with current parameters from widgets
 config = render_sidebar(df, cli_args)
 
+# --- Apply Button Logic ---
+if 'applied_config' not in st.session_state:
+    # First run: auto-apply
+    st.session_state.applied_config = config
+
+# Check if current config differs from applied config
+has_changes = config != st.session_state.applied_config
+
+if st.sidebar.button("Apply Changes", disabled=not has_changes, type="primary"):
+    st.session_state.applied_config = config
+    st.rerun()
+
+# Use APPLIED config for analysis
+run_config = st.session_state.applied_config
+
 # Prepare filtered dataframe for global usage context if needed (mostly passed to visualizer inside render_results)
-selected_years = config['selected_years']
-all_years = config['all_years']
+selected_years = run_config['selected_years']
+all_years = run_config['all_years']
 
 if len(selected_years) < len(all_years):
     df_filtered = df[df['date'].dt.year.isin(selected_years)].reset_index(drop=True)
@@ -125,15 +140,17 @@ else:
 t_analysis_start = time_module.time()
 
 # Only run if we have data selected
-if len(selected_years) > 0 and len(config['days_of_week']) > 0:
+if len(selected_years) > 0 and len(run_config['days_of_week']) > 0:
     results, stats = find_bumps_and_slides(
         df_filtered,
-        config['bump_len'], config['bump_threshold'], config['bump_thresh_type'],
-        config['slide_len'], config['slide_threshold'], config['slide_thresh_type'],
-        min_bump_vol=config['min_bump_vol'],
-        min_slide_vol=config['min_slide_vol'],
-        time_range=config['time_range'],
-        days_of_week=config['days_of_week']
+        run_config['bump_len'], run_config['bump_threshold'], run_config['bump_thresh_type'],
+        run_config['slide_len'], run_config['slide_threshold'], run_config['slide_thresh_type'],
+        min_bump_vol=run_config['min_bump_vol'],
+        min_slide_vol=run_config['min_slide_vol'],
+        bump_up_pct=run_config['bump_up_pct'],
+        slide_up_pct=run_config['slide_up_pct'],
+        time_range=run_config['time_range'],
+        days_of_week=run_config['days_of_week']
     )
     st.session_state.results = results
     st.session_state.stats = stats
@@ -159,7 +176,7 @@ log_perf("Full Analysis", t_analysis_start)
 
 # Render Results
 if st.session_state.results is not None:
-    render_results(st.session_state.results, st.session_state.stats, config, df_filtered)
+    render_results(st.session_state.results, st.session_state.stats, run_config, df_filtered, val_report)
 else:
     st.info("No matches found with current parameters.")
 

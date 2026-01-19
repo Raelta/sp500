@@ -3,9 +3,11 @@ from plotly.subplots import make_subplots
 import pandas as pd
 import numpy as np
 
-def plot_pattern(df, match_row, padding=10, bump_len=None, slide_len=None):
+def plot_pattern(df, match_row, padding=10, bump_len=None, slide_len=None, avg_size_vol=None):
     """
     Plots a specific pattern (Bump + Slide) with context using subplots for Price and Volume.
+    
+    avg_size_vol: Optional float for the yearly average SizeVol to plot as a reference line.
     """
     
     # We use the index from match_row to find location in df
@@ -47,14 +49,33 @@ def plot_pattern(df, match_row, padding=10, bump_len=None, slide_len=None):
         decreasing_line=dict(width=0), # Hide wicks
     ), row=1, col=1)
     
-    # 2. Volume Bar
-    # Mono color for volume as requested
+    # 2. Volume Bar (SizeVol)
+    # Metric: Volume * |Close - Open|
+    price_delta = (plot_data['close'] - plot_data['open']).abs()
+    size_vol = plot_data['volume'] * price_delta
+    
     fig.add_trace(go.Bar(
         x=plot_data['date'],
-        y=plot_data['volume'],
-        name='Volume',
-        marker_color='#7F7F7F' 
+        y=size_vol,
+        name='SizeVol',
+        marker_color='#7F7F7F',
+        customdata=np.stack((plot_data['volume'], price_delta), axis=-1),
+        hovertemplate='<b>Date</b>: %{x}<br>' +
+                      '<b>Volume</b>: %{customdata[0]:,}<br>' +
+                      '<b>Price Change</b>: %{customdata[1]:.2f}<br>' +
+                      '<b>SizeVol</b>: %{y:,.2f}<extra></extra>'
     ), row=2, col=1)
+    
+    # Add Average SizeVol Line if available
+    if avg_size_vol is not None and avg_size_vol > 0:
+        fig.add_hline(
+            y=avg_size_vol,
+            line_dash="dash",
+            line_color="blue",
+            annotation_text=f"Yearly Avg: {avg_size_vol:,.0f}", 
+            annotation_position="top right",
+            row=2, col=1
+        )
     
     # Highlights
     

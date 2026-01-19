@@ -13,6 +13,7 @@ def find_bumps_and_slides(
     bump_len, bump_threshold, bump_thresh_type,
     slide_len, slide_threshold, slide_thresh_type,
     min_bump_vol=0, min_slide_vol=0,
+    bump_up_pct=0.0, slide_up_pct=0.0,
     time_range=None, # (start_time, end_time)
     days_of_week=None, # list of ints 0-6 or names
     progress_callback=None # function(message, percent)
@@ -26,6 +27,10 @@ def find_bumps_and_slides(
     slide_len: int, minutes
     slide_threshold: float
     slide_thresh_type: 'percent' or 'value'
+    min_bump_vol: Minimum volume for bump period
+    min_slide_vol: Minimum volume for slide period
+    bump_up_pct: Minimum percentage of Up candles (Close > Open) in bump
+    slide_up_pct: Minimum percentage of Up candles (Close > Open) in slide
     """
     
     # 1. Pre-calculate Volume Sums (Rolling)
@@ -38,19 +43,9 @@ def find_bumps_and_slides(
     bump_vol = df['volume'].rolling(window=bump_len).sum().shift(-(bump_len - 1))
     
     # Slide Volume (sum from i + bump_len to i + bump_len + slide_len - 1)
-    # First get rolling sum of slide_len, aligned to start of slide
-    # Slide starts at i + bump_len
-    # So we want rolling sum at (i + bump_len + slide_len - 1) which is shift(-(bump_len + slide_len - 1)) ?
-    # Let's trace: 
-    # Rolling sum at index K is sum(K-L+1 ... K)
-    # We want sum for slide starting at J = i + bump_len.
-    # End of slide is J + slide_len - 1.
-    # So we want rolling_sum[J + slide_len - 1].
-    # J + slide_len - 1 = i + bump_len + slide_len - 1.
-    # So shift(-(bump_len + slide_len - 1)).
     slide_vol = df['volume'].rolling(window=slide_len).sum().shift(-(bump_len + slide_len - 1))
 
-    # 2. Calculate Price Changes
+    # 2. Calculate Price Changes & Consistency
     if progress_callback: progress_callback("Analyzing price changes...", 30)
 
     # Bump Change
@@ -63,6 +58,13 @@ def find_bumps_and_slides(
     slide_close = df['close'].shift(-(bump_len + slide_len - 1))
     slide_change = calculate_change(slide_open, slide_close, slide_thresh_type)
     
+    # Candle Direction (Up = 1)
+    is_up = (df['close'] > df['open']).astype(int)
+    
+    # Rolling Up Ratio
+    bump_up_ratio = is_up.rolling(window=bump_len).mean().shift(-(bump_len - 1))
+    slide_up_ratio = is_up.rolling(window=slide_len).mean().shift(-(bump_len + slide_len - 1))
+    
     # 3. Create Candidate DataFrame
     if progress_callback: progress_callback("Structuring candidate data...", 50)
 
@@ -73,6 +75,8 @@ def find_bumps_and_slides(
         'slide_change': slide_change,
         'bump_vol': bump_vol,
         'slide_vol': slide_vol,
+        'bump_up_pct': bump_up_ratio * 100,
+        'slide_up_pct': slide_up_ratio * 100,
         'bump_start_price': bump_open,
         'bump_end_price': bump_close,
         'slide_start_price': slide_open,
@@ -109,8 +113,13 @@ def find_bumps_and_slides(
          return pd.DataFrame(), {'total_bumps': 0, 'hits': 0, 'misses': 0, 'hit_ratio': 0}
 
     # Calculate masks
-    bump_mask = (candidates['bump_change'].abs() >= bump_threshold) & (candidates['bump_vol'] >= min_bump_vol)
-    slide_mask = (candidates['slide_change'].abs() >= slide_threshold) & (candidates['slide_vol'] >= min_slide_vol)
+    bump_mask = (candidates['bump_change'].abs() >= bump_threshold) & \
+                (candidates['bump_vol'] >= min_bump_vol) & \
+                (candidates['bump_up_pct'] >= bump_up_pct)
+                
+    slide_mask = (candidates['slide_change'].abs() >= slide_threshold) & \
+                 (candidates['slide_vol'] >= min_slide_vol) & \
+                 (candidates['slide_up_pct'] >= slide_up_pct)
     
     total_bumps = bump_mask.sum()
     hits = (bump_mask & slide_mask).sum()

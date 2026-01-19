@@ -2,6 +2,29 @@ import streamlit as st
 from datetime import time
 from src.ui.utils import render_checkbox_dropdown, get_app_version
 
+def render_time_input(label, default_minutes, key_prefix):
+    """
+    Renders 3 number inputs (Days, Hours, Minutes) and returns total minutes.
+    """
+    st.sidebar.markdown(f"**{label}**")
+    
+    # Calculate defaults
+    d_default = int(default_minutes // 1440)
+    h_default = int((default_minutes % 1440) // 60)
+    m_default = int(default_minutes % 60)
+    
+    col1, col2, col3 = st.sidebar.columns(3)
+    
+    with col1:
+        days = st.number_input("Days", min_value=0, value=d_default, key=f"{key_prefix}_days")
+    with col2:
+        hours = st.number_input("Hours", min_value=0, max_value=23, value=h_default, key=f"{key_prefix}_hours")
+    with col3:
+        minutes = st.number_input("Mins", min_value=0, max_value=59, value=m_default, key=f"{key_prefix}_mins")
+        
+    total_mins = (days * 1440) + (hours * 60) + minutes
+    return max(1, total_mins) # Ensure at least 1 min
+
 def render_sidebar(df, cli_args):
     """
     Renders the sidebar components and returns the configuration parameters.
@@ -18,7 +41,7 @@ def render_sidebar(df, cli_args):
     if st.sidebar.button("🔄 Reload Data", help="Clear cache and force reload from disk"):
         st.cache_data.clear()
         # Clear session state to ensure fresh analysis
-        for key in ['results', 'selected_match_idx', 'preselected_done', 'stats']:
+        for key in ['results', 'selected_match_idx', 'preselected_done', 'stats', 'applied_config']:
             if key in st.session_state:
                 del st.session_state[key]
         st.rerun()
@@ -70,15 +93,23 @@ def render_sidebar(df, cli_args):
 
     # CLI Override for Bump Length
     b_len_default = cli_args.bump_len if cli_args.bump_len is not None else 5
-    bump_len = st.sidebar.slider("Bump Length (min)", 3, 20, b_len_default, help="Duration of the initial trend window in minutes.")
+    bump_len = render_time_input("Bump Size", b_len_default, "bump_size")
+    
     bump_threshold = st.sidebar.number_input(b_label, min_value=0.0, value=float(b_val), step=b_step, format="%.2f", key=f"bump_th_{bump_thresh_type}", help=b_help)
+    
+    b_up_default = cli_args.bump_up_pct if cli_args.bump_up_pct is not None else 0.0
+    bump_up_pct = st.sidebar.slider("Min % Up Candles", 0.0, 100.0, float(b_up_default), step=5.0, key="bump_up_pct", help="Minimum percentage of bars where Close > Open.")
 
     st.sidebar.header("Slide Parameters")
 
     # CLI Override for Slide Length
     s_len_default = cli_args.slide_len if cli_args.slide_len is not None else 3
-    slide_len = st.sidebar.slider("Slide Length (min)", 1, 20, s_len_default, help="Duration of the subsequent reaction window in minutes.")
+    slide_len = render_time_input("Slide Size", s_len_default, "slide_size")
+    
     slide_threshold = st.sidebar.number_input(s_label, min_value=0.0, value=float(s_val), step=s_step, format="%.2f", key=f"slide_th_{slide_thresh_type}", help=s_help)
+    
+    s_up_default = cli_args.slide_up_pct if cli_args.slide_up_pct is not None else 0.0
+    slide_up_pct = st.sidebar.slider("Min % Up Candles", 0.0, 100.0, float(s_up_default), step=5.0, key="slide_up_pct", help="Minimum percentage of bars where Close > Open.")
 
     st.sidebar.header("Filters")
 
@@ -123,9 +154,11 @@ def render_sidebar(df, cli_args):
         'bump_len': bump_len,
         'bump_threshold': bump_threshold,
         'bump_thresh_type': bump_thresh_type,
+        'bump_up_pct': bump_up_pct,
         'slide_len': slide_len,
         'slide_threshold': slide_threshold,
         'slide_thresh_type': slide_thresh_type,
+        'slide_up_pct': slide_up_pct,
         'min_bump_vol': min_bump_vol,
         'min_slide_vol': min_slide_vol,
         'time_range': (time_start, time_end),
