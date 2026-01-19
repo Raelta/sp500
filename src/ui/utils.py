@@ -1,5 +1,6 @@
 import streamlit as st
 import subprocess
+import time as time_module
 
 def get_app_version():
     """
@@ -75,3 +76,13 @@ def render_checkbox_dropdown(label, options, key_prefix, default_all=True):
                 selected_items.append(opt)
                 
     return selected_items
+
+def log_perf(label, start_time):
+    # Helper to log performance
+    duration = time_module.time() - start_time
+    msg = f"[PERF] {label}: {duration:.4f}s"
+    print(msg)
+    if 'perf_logs' not in st.session_state:
+        st.session_state.perf_logs = []
+    st.session_state.perf_logs.append(msg)
+    return time_module.time() # Return new start time

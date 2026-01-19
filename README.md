@@ -1,14 +1,24 @@
 # SP500 Bump & Slide Analysis
 
-A Python application designed to analyze intraday SPY (S&P 500 ETF) data for "Bump and Slide" price patterns. This tool provides both an interactive Streamlit dashboard for visual analysis and a Command Line Interface (CLI) for automated or quick scans.
+A Python application designed to analyze intraday SPY (S&P 500 ETF) data for "Bump and Slide" price patterns. This tool provides an interactive Streamlit dashboard for visual analysis with powerful filtering and configuration options.
 
 ## Features
 
-- **Pattern Detection**: Automatically identifies "Bump" (initial trend) and "Slide" (subsequent reaction) patterns based on user-defined criteria.
-- **Interactive Dashboard**: Powerful Streamlit app with reactive analysis and Plotly visualizations.
+- **Pattern Detection**: 
+  - Automatically identifies "Bump" (initial trend) and "Slide" (subsequent reaction) patterns.
+  - Detects patterns based on configurable lengths (minutes), thresholds (price/%), and volume.
+- **Interactive Dashboard**: 
+  - Powerful Streamlit app with reactive analysis.
+  - Interactive Plotly visualizations with zoom, pan, and hover details.
+- **Advanced Visualization**:
+  - **Wickless Candles**: Cleaner price charts that emphasize Open/Close bodies.
+  - **Volume Subplot**: Dedicated volume chart synchronized with price action.
+  - **Pattern Highlighting**: Visual rectangles indicating exactly where Bump and Slide windows occur.
 - **Smart Filtering**: 
   - Excel-style "Select All" filters for Years and Days of the Week.
   - Filter by Volume, Time of Day, and Days.
+- **Statistics**:
+  - Real-time "Hit Rate" calculation showing how many bumps convert to valid slides.
 - **Interactive UI**:
   - **Table-Driven Navigation**: Click any row in the matches table to instantly view the chart.
   - **Configurable Layout**: Toggle between Table-Top or Chart-Top views.
@@ -67,23 +77,29 @@ streamlit run app.py -- --bump-len 10 --bump-thresh 0.1
 ## Project Structure
 
 ```
+.
 ├── app.py                  # Main Streamlit application entry point
+├── CHANGELOG.md            # History of changes and versions
+├── README.md               # Documentation
 ├── requirements.txt        # Python dependencies
 ├── spy_data.parquet        # Default dataset (SPY Intraday Data)
-├── src/
-│   ├── analyzer.py         # Core logic for pattern detection
-│   ├── data_loader.py      # Data loading (cached & uncached)
-│   ├── data_validator.py   # Data quality checks (gaps, missing minutes)
-│   ├── news_provider.py    # Google News search integration
-│   ├── ui_utils.py         # Custom UI components (Excel-style filters)
-│   └── visualizer.py       # Plotly visualization logic
-└── tests/
-    └── test_app.py         # App integration tests
+└── src/
+    ├── analyzer.py         # Core logic for pattern detection and stats
+    ├── config.py           # CLI argument parsing and configuration
+    ├── data_loader.py      # Data loading (cached & uncached)
+    ├── data_validator.py   # Data quality checks (gaps, missing minutes)
+    ├── news_provider.py    # Google News search integration
+    ├── visualizer.py       # Plotly visualization logic (Charts)
+    └── ui/                 # UI Component Package
+        ├── __init__.py
+        ├── results.py      # Logic for displaying tables, charts, and stats
+        ├── sidebar.py      # Logic for rendering the configuration sidebar
+        └── utils.py        # Shared UI utilities and helpers
 ```
 
 ## Testing
 
-The project includes tests using `pytest` and `streamlit.testing`.
+The project includes tests using `pytest`.
 
 Run tests with:
 ```bash
