@@ -44,14 +44,17 @@ def test_app_analysis_flow():
         print("Exceptions:", at.exception)
     
     assert len(at.metric) > 0
-    assert "Matches Found" in at.metric[0].label
+    # Check if "Matches Found" is in ANY of the metrics
+    metric_labels = [m.label for m in at.metric]
+    assert "Matches Found" in metric_labels, f"Expected 'Matches Found' in metrics, got: {metric_labels}"
     
     # Should see DataFrame
     assert len(at.dataframe) > 0
     
-    # Should see Selectbox (implies matches found and visualization area rendered)
-    assert len(at.selectbox) > 0
+    # Should see "Visualize Pattern" subheader (implies matches found and visualization area rendered)
+    subheader_texts = [s.value for s in at.subheader]
+    assert "Visualize Pattern" in subheader_texts, f"Expected 'Visualize Pattern' in subheaders, got: {subheader_texts}"
     
-    # Check if Plotly Chart is supported in this version of AppTest
-    # If not, skipping explicit check but selectbox presence confirms we reached the viz block.
-    # assert len(at.plotly_chart) > 0
+    # Check if Plotly Chart is present
+    if hasattr(at, 'plotly_chart'):
+        assert len(at.plotly_chart) > 0

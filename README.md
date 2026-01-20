@@ -79,10 +79,12 @@ streamlit run app.py -- --bump-len 10 --bump-thresh 0.1
 ```
 .
 ├── app.py                  # Main Streamlit application entry point
+├── debug_app.py            # Visual verification tool using synthetic data
 ├── CHANGELOG.md            # History of changes and versions
 ├── README.md               # Documentation
 ├── requirements.txt        # Python dependencies
 ├── spy_data.parquet        # Default dataset (SPY Intraday Data)
+├── TEST_STRATEGY.md        # Detailed QA strategy document
 └── src/
     ├── analyzer.py         # Core logic for pattern detection and stats
     ├── config.py           # CLI argument parsing and configuration
@@ -90,6 +92,8 @@ streamlit run app.py -- --bump-len 10 --bump-thresh 0.1
     ├── data_validator.py   # Data quality checks (gaps, missing minutes)
     ├── news_provider.py    # Google News search integration
     ├── visualizer.py       # Plotly visualization logic (Charts)
+    ├── test_utils/         # Test utilities
+    │   └── data_generator.py # Synthetic data generation logic
     └── ui/                 # UI Component Package
         ├── __init__.py
         ├── results.py      # Logic for displaying tables, charts, and stats
@@ -97,11 +101,24 @@ streamlit run app.py -- --bump-len 10 --bump-thresh 0.1
         └── utils.py        # Shared UI utilities and helpers
 ```
 
-## Testing
+## Quality Assurance & Testing
 
-The project includes tests using `pytest`.
+We employ a robust testing strategy using Synthetic Data to verify logic independent of data quality.
 
-Run tests with:
+### Running Tests
+To run Unit and Property-based tests:
 ```bash
-pytest
+python -m pytest
 ```
+
+### Visual Debug Mode
+To verify the analyzer logic against controlled synthetic data:
+```bash
+streamlit run debug_app.py
+```
+This mode allows you to:
+- Generate random market noise.
+- Inject specific "Perfect Patterns" at known indices.
+- Verify if the analyzer detects them correctly.
+
+See [TEST_STRATEGY.md](TEST_STRATEGY.md) for full details.
