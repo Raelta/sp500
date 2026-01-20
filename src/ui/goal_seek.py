@@ -27,7 +27,6 @@ def render_goal_seek_ui(df, sidebar_config):
     params_grid = {}
     
     # Parameter Definitions: (Label, key, type, default_step)
-    # We assume reasonable defaults for min/max handling in the UI logic
     param_defs = [
         ("Bump Length (min)", 'bump_len', int, 1),
         ("Bump Threshold", 'bump_threshold', float, 0.05),
@@ -39,64 +38,76 @@ def render_goal_seek_ui(df, sidebar_config):
         ("Slide Up %", 'slide_up_pct', float, 5.0),
         ("Min Slide Volume", 'min_slide_vol', int, 10000),
     ]
+
+    # Split into two groups
+    bump_defs = param_defs[:4]
+    slide_defs = param_defs[4:]
     
-    total_combinations = 1
-    
-    # Create a cleaner grid layout
-    for label, key, dtype, step in param_defs:
-        current_val = sidebar_config.get(key, 0)
-        
-        # Use an expander or a container with columns for each row
-        with st.container():
-            c1, c2, c3 = st.columns([0.25, 0.15, 0.6])
+    # Helper to render a column of parameters
+    def render_param_column(defs):
+        local_combos = 1
+        for i, (label, key, dtype, step) in enumerate(defs):
+            current_val = sidebar_config.get(key, 0)
             
-            with c1:
-                # Checkbox to unlock
-                is_varying = st.checkbox(f"{label}", key=f"vary_{key}", help=f"Check to search a range for {label}")
+            with st.container():
+                # Header Row: Checkbox | Locked Value
+                # Using columns to put them on the same line
+                c1, c2 = st.columns([0.7, 0.3])
+                with c1:
+                    is_varying = st.checkbox(label, key=f"vary_{key}")
+                with c2:
+                    st.caption(f"Lock: **{current_val}**")
                 
-            with c2:
-                # Show current locked value
-                st.caption(f"Locked: **{current_val}**")
-                
-            with c3:
+                # Input Row (Only if varying)
                 if is_varying:
-                    # Range Inputs
                     r1, r2, r3 = st.columns(3)
                     
-                    # Defaults
                     def_start = current_val
                     def_end = current_val + (step * 4)
                     
-                    start = r1.number_input(f"Start", value=dtype(def_start), key=f"start_{key}", step=step)
-                    end = r2.number_input(f"End", value=dtype(def_end), key=f"end_{key}", step=step)
-                    step_val = r3.number_input(f"Step", value=dtype(step), key=f"step_{key}", step=step)
+                    # Compact inputs with "S/E/St" labels or full names
+                    start = r1.number_input("Start", value=dtype(def_start), key=f"start_{key}", step=step)
+                    end = r2.number_input("End", value=dtype(def_end), key=f"end_{key}", step=step)
+                    step_val = r3.number_input("Step", value=dtype(step), key=f"step_{key}", step=step)
                     
-                    # Validate Step
                     if step_val <= 0:
-                        st.error("Step must be > 0")
-                        step_val = 1 # prevent div by zero
+                        st.error("Step > 0")
+                        step_val = 1
                         
                     # Calculate Range
-                    # np.arange includes start, excludes end. We usually want inclusive for UI "End".
-                    # So we add a small epsilon
                     if dtype == int:
                         vals = np.arange(start, end + 0.0001, step_val).astype(int).tolist()
                     else:
                         vals = np.arange(start, end + 0.00001, step_val).tolist()
                         vals = [round(x, 4) for x in vals]
                     
-                    if len(vals) == 0:
-                        st.warning("Range empty")
-                    else:
-                        st.caption(f"Testing {len(vals)} values")
+                    if len(vals) > 0:
                         params_grid[key] = vals
-                        total_combinations *= len(vals)
-                else:
-                    # Not varying, just placeholder to align
-                    st.write("")
-        
-        st.markdown("---") # Thin separator
+                        local_combos *= len(vals)
+                        st.caption(f"Testing {len(vals)} values")
+                    else:
+                        st.warning("Empty")
+            
+            # Add divider except for the last item
+            if i < len(defs) - 1:
+                 st.divider()
+                 
+        return local_combos
 
+    # Layout: Two Columns
+    col_left, col_right = st.columns(2)
+    
+    with col_left:
+        st.markdown("#### Bump Parameters")
+        combos_left = render_param_column(bump_defs)
+        
+    with col_right:
+        st.markdown("#### Slide Parameters")
+        combos_right = render_param_column(slide_defs)
+        
+    total_combinations = combos_left * combos_right
+
+    st.markdown("---")
     st.write(f"**Total Combinations to Search:** {total_combinations}")
     
     if total_combinations > 5000:
@@ -106,14 +117,8 @@ def render_goal_seek_ui(df, sidebar_config):
     if st.button("Run Goal Seek Search", type="primary", disabled=(total_combinations < 1)):
         seeker = GoalSeeker(df)
         
-        # Prepare fixed params:
-        # Everything in sidebar_config that is NOT in params_grid is fixed.
-        # This allows GoalSeeker to use the sidebar values for things we didn't vary.
+        # Prepare fixed params (everything not in params_grid)
         fixed_params = {k: v for k, v in sidebar_config.items() if k not in params_grid}
-        
-        # Add Threshold Types explicitly (they are in sidebar_config usually, but ensure they pass through)
-        # Note: sidebar_config contains 'bump_thresh_type', 'slide_thresh_type', 'time_range', 'days_of_week' etc.
-        # These will be passed in fixed_params automatically by the logic above.
         
         pbar = st.progress(0.0)
         status = st.empty()

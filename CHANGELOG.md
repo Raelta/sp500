@@ -10,6 +10,7 @@ All notable changes to this project will be documented in this file.
 - **Goal Seek / Reverse Search**: New analysis mode to find parameter combinations that achieve a target Conversion Rate.
   - **Smart Search Engine**: Optimized algorithm that groups structural parameters to maximize search performance (`src/search_engine.py`).
   - **Variable Parameter Search**: UI to "Lock" specific parameters while varying others across a defined range.
+  - **Compact Layout**: Optimized 2-column interface to minimize scrolling during configuration.
   - **Mode Selection**: Switch between "Standard Analysis" and "Goal Seek" modes via the sidebar.
 
 ## [0.1.0] - 2025-12-27
