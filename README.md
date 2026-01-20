@@ -7,6 +7,9 @@ A Python application designed to analyze intraday SPY (S&P 500 ETF) data for "Bu
 - **Pattern Detection**: 
   - Automatically identifies "Bump" (initial trend) and "Slide" (subsequent reaction) patterns.
   - Detects patterns based on configurable lengths (minutes), thresholds (price/%), and volume.
+- **Goal Seek / Reverse Search**:
+  - Define a target Conversion Rate and find parameter combinations that achieve it.
+  - "Lock" specific parameters while varying others across a range.
 - **Interactive Dashboard**: 
   - Powerful Streamlit app with reactive analysis.
   - Interactive Plotly visualizations with zoom, pan, and hover details.
@@ -54,6 +57,15 @@ streamlit run app.py
 *   **Selection**: Click any row in the **Matches Table** to view the visualization. Click column headers to sort.
 *   **Layout**: Use the "App Layout" toggle to customize your workspace.
 
+### Goal Seek Mode
+
+Switch to **Goal Seek** mode via the sidebar to perform reverse analysis.
+
+1.  **Set Target**: Define your desired Conversion Rate (Hit Ratio).
+2.  **Lock Parameters**: Use the Sidebar to set "Fixed" values for parameters you want to constrain.
+3.  **Vary Parameters**: In the main view, check "Vary" for parameters you want to search. Define the Start, End, and Step for each.
+4.  **Run**: Click "Run Goal Seek Search" to find all combinations meeting your target.
+
 #### Command Line Overrides
 
 You can launch the app with custom parameter defaults using command-line arguments. Append your flags after a `--` separator.
@@ -91,11 +103,13 @@ streamlit run app.py -- --bump-len 10 --bump-thresh 0.1
     ├── data_loader.py      # Data loading (cached & uncached)
     ├── data_validator.py   # Data quality checks (gaps, missing minutes)
     ├── news_provider.py    # Google News search integration
+    ├── search_engine.py    # Optimized search logic for Goal Seek
     ├── visualizer.py       # Plotly visualization logic (Charts)
     ├── test_utils/         # Test utilities
     │   └── data_generator.py # Synthetic data generation logic
     └── ui/                 # UI Component Package
         ├── __init__.py
+        ├── goal_seek.py    # Goal Seek UI logic
         ├── results.py      # Logic for displaying tables, charts, and stats
         ├── sidebar.py      # Logic for rendering the configuration sidebar
         └── utils.py        # Shared UI utilities and helpers
