@@ -5,7 +5,7 @@ from src.analyzer import calculate_change
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import os
 
-def _process_structure(df_search, s_dict, filter_keys, filter_values, target_cr_min, min_bumps=0):
+def _process_structure(df_search, s_dict, filter_keys, filter_values, target_cr_min, min_bumps=0, detailed=False):
     """
     Worker function to process a single structural configuration.
     Uses Vectorized Broadcasting (Matrix Multiplication) to check all filter combinations efficiently.
@@ -142,6 +142,49 @@ def _process_structure(df_search, s_dict, filter_keys, filter_values, target_cr_
     slide_keys_names = [filter_keys[i] for i in slide_indices]
     
     for b, s in zip(b_indices, s_indices):
+        # --- Overlap Filtering ---
+        # 1. Identify raw hits
+        mask = bump_matrix[:, b] & slide_matrix[:, s]
+        raw_hit_indices = np.where(mask)[0]
+        
+        if len(raw_hit_indices) == 0:
+            filtered_hits = 0
+            filtered_hit_indices = []
+        else:
+            # 2. Get scores (Slide Change Abs)
+            # slide_change_abs is a Series, access via iloc or .values
+            scores = slide_change_abs.iloc[raw_hit_indices].values
+            
+            # 3. Sort by score descending
+            sorted_order = np.argsort(scores)[::-1]
+            sorted_indices = raw_hit_indices[sorted_order]
+            
+            # 4. Greedy Non-Maximum Suppression
+            kept_indices = []
+            occupied = np.zeros(n_rows, dtype=bool)
+            window_len = bump_len + slide_len
+            
+            for idx in sorted_indices:
+                # Check for overlap
+                # Window is [idx, idx + window_len)
+                # Ensure we don't go out of bounds (though indices are valid starts)
+                end_idx = min(idx + window_len, n_rows)
+                
+                if not occupied[idx:end_idx].any():
+                    kept_indices.append(idx)
+                    occupied[idx:end_idx] = True
+            
+            filtered_hit_indices = sorted(kept_indices) # Restore time order
+            filtered_hits = len(filtered_hit_indices)
+
+        # Recalculate CR
+        total_b = int(total_bumps_vec[b])
+        new_cr = (filtered_hits / total_b * 100) if total_b > 0 else 0.0
+        
+        # Apply strict filter on NEW CR
+        if new_cr < target_cr_min:
+            continue
+
         res = s_dict.copy()
         
         # Add Bump Params
@@ -151,11 +194,46 @@ def _process_structure(df_search, s_dict, filter_keys, filter_values, target_cr_
         for k, v in zip(slide_keys_names, slide_combos[s]):
             res[k] = v
             
-        res['total_bumps'] = int(total_bumps_vec[b])
-        res['hits'] = int(hits_matrix[b, s])
-        res['conversion_rate'] = float(cr_matrix[b, s])
+        res['total_bumps'] = total_b
+        res['hits'] = filtered_hits
+        res['conversion_rate'] = float(new_cr)
         
-        local_results.append(res)
+        if detailed:
+            if res['hits'] > 0:
+                # Use filtered indices
+                hit_indices = np.array(filtered_hit_indices)
+                
+                # Extract Data Series (aligned)
+                # Use .values to avoid index issues if df_search has non-standard index
+                d_start = df_search['date'].iloc[hit_indices].values
+                d_bend = df_search['date'].shift(-(bump_len - 1)).iloc[hit_indices].values
+                d_sstart = df_search['date'].shift(-bump_len).iloc[hit_indices].values
+                d_send = df_search['date'].shift(-(bump_len + slide_len - 1)).iloc[hit_indices].values
+                
+                b_change_vals = bump_change.iloc[hit_indices].values
+                s_change_vals = slide_change.iloc[hit_indices].values
+                b_vol_vals = bump_vol.iloc[hit_indices].values
+                s_vol_vals = slide_vol.iloc[hit_indices].values
+                b_up_vals = bump_up_pct.iloc[hit_indices].values
+                s_up_vals = slide_up_pct.iloc[hit_indices].values
+                
+                for k in range(len(hit_indices)):
+                    row_det = res.copy()
+                    row_det.update({
+                        'bump_start_date': str(d_start[k]),
+                        'bump_end_date': str(d_bend[k]),
+                        'slide_start_date': str(d_sstart[k]),
+                        'slide_end_date': str(d_send[k]),
+                        'bump_change': float(b_change_vals[k]),
+                        'slide_change': float(s_change_vals[k]),
+                        'bump_vol': float(b_vol_vals[k]),
+                        'slide_vol': float(s_vol_vals[k]),
+                        'bump_up_pct_actual': float(b_up_vals[k]),
+                        'slide_up_pct_actual': float(s_up_vals[k])
+                    })
+                    local_results.append(row_det)
+        else:
+            local_results.append(res)
             
     return local_results
 
@@ -163,7 +241,7 @@ class GoalSeeker:
     def __init__(self, df):
         self.df = df.copy()
 
-    def search(self, params_grid, fixed_params=None, target_cr_min=0, min_bumps=0, progress_callback=None):
+    def search(self, params_grid, fixed_params=None, target_cr_min=0, min_bumps=0, progress_callback=None, detailed=False):
         """
         Executes an exhaustive search over the provided parameter grid using Multiprocessing and Vectorization.
         """
@@ -217,7 +295,8 @@ class GoalSeeker:
                     filter_keys, 
                     filter_values, 
                     target_cr_min,
-                    min_bumps
+                    min_bumps,
+                    detailed
                 )
                 future_to_struct[future] = s_dict
             
@@ -241,24 +320,35 @@ class GoalSeeker:
         
         # --- Post-process: Add CLI Command for reproduction ---
         if results:
-            cli_mapping = {
+            range_mapping = {
                 'bump_len': 'bump-len',
                 'slide_len': 'slide-len',
-                'bump_threshold': 'bump-thresh',
-                'slide_threshold': 'slide-thresh',
                 'min_bump_vol': 'bump-vol',
                 'min_slide_vol': 'slide-vol',
                 'bump_up_pct': 'bump-up',
                 'slide_up_pct': 'slide-up'
             }
             
+            single_mapping = {
+                'bump_threshold': 'min-bump-threshold',
+                'slide_threshold': 'min-slide-threshold'
+            }
+            
             for res in results:
                 parts = ["python goal_seek_cli.py"]
-                for key, cli_arg in cli_mapping.items():
+                
+                # Ranges (Locked)
+                for key, cli_arg in range_mapping.items():
                     val = res.get(key)
                     if val is not None:
                         # Use step=0 to lock the range to this specific value
                         parts.append(f"--{cli_arg}-start {val} --{cli_arg}-end {val} --{cli_arg}-step 0")
+                
+                # Singles
+                for key, cli_arg in single_mapping.items():
+                    val = res.get(key)
+                    if val is not None:
+                        parts.append(f"--{cli_arg} {val}")
                 
                 # Ensure target CR allows this result to show (set to 0)
                 parts.append("--target-cr 0")

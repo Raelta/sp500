@@ -4,30 +4,37 @@ import sys
 import time
 from src.data_loader import load_data_uncached
 from src.search_engine import GoalSeeker
+from src.catalog import WindowCatalog
+from src.catalog_search import CatalogSearcher
 from src.data_validator import validate_dataset
 
 def parse_args():
     description = "Goal Seek CLI for SP500 Bump & Slide Analysis"
     epilog = """
 Examples:
-  # Run with default ranges (Bump/Slide Len 3-6, Threshold 3-10)
+  # Run with default settings (Lengths 3-6, Thresholds >= 3.0)
   python goal_seek_cli.py --target-cr 60
 
-  # Run with custom ranges
-  python goal_seek_cli.py --target-cr 75 --bump-len-start 5 --bump-len-end 10 --bump-thresh-start 5
+  # Run with custom length ranges and higher thresholds
+  python goal_seek_cli.py --target-cr 75 --bump-len-start 5 --bump-len-end 10 --min-bump-threshold 5.0
 
   # Run with minimum bumps filter
   python goal_seek_cli.py --target-cr 60 --min-bumps 10
 
 Available Parameter Ranges:
-  For each parameter [name], you can specify:
+  For LENGTH parameters [name], you can specify:
     --[name]-start: Start value of the range
     --[name]-end:   End value of the range (inclusive)
     --[name]-step:  Step size (set to 0 to lock at start value)
 
   Parameters:
     bump-len, slide-len       (Default: 3-6, step 1)
-    bump-thresh, slide-thresh (Default: 3.0-10.0, step 0.5)
+    
+  Thresholds (Single Minimum Value):
+    --min-bump-threshold      (Default: 3.0)
+    --min-slide-threshold     (Default: 3.0)
+    
+  Other Ranges:
     bump-vol, slide-vol       (Default: Locked at 0)
     bump-up, slide-up         (Default: Locked at 0)
 """
@@ -43,6 +50,12 @@ Available Parameter Ranges:
     parser.add_argument("--min-bumps", type=int, default=0, help="Minimum Total Bumps Required")
     parser.add_argument("--top-n", type=int, default=20, help="Number of top results to display")
     parser.add_argument("--output", default="goal_seek_results.csv", help="Output CSV filename")
+    parser.add_argument("--detailed", action="store_true", help="Output detailed matches (one row per match) in results CSV instead of summaries")
+    
+    # Catalog Options
+    parser.add_argument("--build-catalog", action="store_true", help="Build the Window Catalog before searching")
+    parser.add_argument("--use-catalog", action="store_true", help="Use pre-computed catalog for search")
+    parser.add_argument("--catalog-max-len", type=int, default=360, help="Max Window Length for Catalog (default 360)")
     
     # Helper to add range args
     def add_range_args(name, default_start, default_end, default_step, help_text):
@@ -55,8 +68,9 @@ Available Parameter Ranges:
     add_range_args("bump-len", 3, 6, 1, "Bump Length (min)")
     add_range_args("slide-len", 3, 6, 1, "Slide Length (min)")
     
-    add_range_args("bump-thresh", 3.0, 10.0, 0.5, "Bump Threshold")
-    add_range_args("slide-thresh", 3.0, 10.0, 0.5, "Slide Threshold")
+    # Thresholds (Fixed Minimums)
+    parser.add_argument("--min-bump-threshold", type=float, default=3.0, help="Minimum Bump Threshold")
+    parser.add_argument("--min-slide-threshold", type=float, default=3.0, help="Minimum Slide Threshold")
     
     # Volumes and Up% default to 0 (Locked)
     # If user wants to vary them, they can set start/end/step.
@@ -78,13 +92,15 @@ def generate_grid(args):
     mappings = {
         'bump-len': ('bump_len', int),
         'slide-len': ('slide_len', int),
-        'bump-thresh': ('bump_threshold', float),
-        'slide-thresh': ('slide_threshold', float),
         'bump-vol': ('min_bump_vol', int),
         'slide-vol': ('min_slide_vol', int),
         'bump-up': ('bump_up_pct', float),
         'slide-up': ('slide_up_pct', float),
     }
+    
+    # Add Fixed Thresholds
+    grid['bump_threshold'] = [args.min_bump_threshold]
+    grid['slide_threshold'] = [args.min_slide_threshold]
     
     import numpy as np
     
@@ -120,28 +136,40 @@ def main():
     print(f"Target CR: >={args.target_cr}%")
     print(f"Min Bumps: >={args.min_bumps}")
     
-    # Load Data
-    try:
-        df = load_data_uncached(args.data)
-        print(f"Loaded {len(df)} rows.")
-        print(f"Date Column Type: {df['date'].dtype}")
-        
-        # Validation Debug
-        val_report = validate_dataset(df)
-        dup_count = val_report['duplicates']['count']
-        print(f"Validator found {dup_count} duplicates.")
-        
-        # Clean Duplicates (match app.py logic)
-        initial_len = len(df)
-        df = df.drop_duplicates(subset=['date'], keep='first').reset_index(drop=True)
-        if len(df) < initial_len:
-            print(f"Removed {initial_len - len(df)} duplicate rows. Analysis set: {len(df)} rows.")
-        else:
-            print("No duplicates removed by drop_duplicates.")
+    # Handle Catalog Build
+    if args.build_catalog:
+        try:
+            print("Loading data for catalog build...")
+            df = load_data_uncached(args.data)
+            print(f"Loaded {len(df)} rows.")
             
-    except Exception as e:
-        print(f"Error loading data: {e}")
-        sys.exit(1)
+            # Clean Duplicates
+            df = df.drop_duplicates(subset=['date'], keep='first').reset_index(drop=True)
+            
+            catalog = WindowCatalog()
+            catalog.build(df, max_len=args.catalog_max_len)
+            print("Catalog build completed successfully.")
+            sys.exit(0)
+        except Exception as e:
+            print(f"Error building catalog: {e}")
+            sys.exit(1)
+
+    # Load Data (if not using catalog, or if needed)
+    # If using catalog, we don't strictly need to load the dataframe unless we want to validate or use original columns not in catalog
+    # But current GoalSeeker needs df. CatalogSearcher loads from disk.
+    
+    df = None
+    if not args.use_catalog:
+        try:
+            df = load_data_uncached(args.data)
+            print(f"Loaded {len(df)} rows.")
+            
+            # Clean Duplicates
+            df = df.drop_duplicates(subset=['date'], keep='first').reset_index(drop=True)
+                
+        except Exception as e:
+            print(f"Error loading data: {e}")
+            sys.exit(1)
         
     # Setup Grid
     params_grid = generate_grid(args)
@@ -190,7 +218,12 @@ def main():
         
     print("\nStarting Search...")
     
-    seeker = GoalSeeker(df)
+    if args.use_catalog:
+        print("Using Catalog Searcher...")
+        seeker = CatalogSearcher()
+    else:
+        print("Using Standard GoalSeeker...")
+        seeker = GoalSeeker(df)
     
     # Run Search (target_cr_min=0 to get all results, then filter/sort)
     # Passing 0.0 allows us to see "Best CR" even if it's below target.
@@ -200,7 +233,8 @@ def main():
             fixed_params, 
             target_cr_min=0.0, 
             min_bumps=args.min_bumps,
-            progress_callback=progress
+            progress_callback=progress,
+            detailed=args.detailed
         )
         print("\n\nSearch Complete.")
     except KeyboardInterrupt:
@@ -234,17 +268,25 @@ def main():
     print(f"Top {len(results_to_save)} results saved to: {args.output}")
     
     # Print Top N
-    print(f"\n--- Top {args.top_n} Configurations ---")
+    print(f"\n--- Top {args.top_n} Results ---")
     top_n = results_sorted.head(args.top_n)
     
     # Select key columns for display
+    # If detailed, we might want to show dates too? 
+    # But usually terminal width is limited.
     cols = ['conversion_rate', 'hits', 'total_bumps', 
             'bump_len', 'slide_len', 
             'bump_threshold', 'slide_threshold', 
             'min_bump_vol', 'min_slide_vol']
             
+    if args.detailed:
+        if 'bump_start_date' in top_n.columns:
+            cols.insert(0, 'bump_start_date')
+            
     # Format for printing
-    print(top_n[cols].to_string(index=False))
+    # Ensure cols exist
+    existing_cols = [c for c in cols if c in top_n.columns]
+    print(top_n[existing_cols].to_string(index=False))
 
 if __name__ == "__main__":
     main()

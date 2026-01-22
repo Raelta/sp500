@@ -14,6 +14,10 @@ A Python application designed to analyze intraday SPY (S&P 500 ETF) data for "Bu
     - **Parallel Processing**: Utilizes all available CPU cores to execute the search concurrently.
     - **Vectorized Broadcasting**: Uses NumPy matrix multiplication to check thousands of parameter combinations simultaneously, eliminating slow loops.
     - **Smart Pruning**: Automatically discards impossible parameter combinations based on data limits.
+  - **Window Catalog (Optimized Search)**:
+    - Pre-compute window metrics to disk for instant lookups.
+    - **Hybrid Storage**: Uses a memory-mapped matrix for Price Change (2GB) and cumulative sums for Volume/Up Ratio (50MB) to balance speed and storage.
+    - **Parallel Search**: Uses `ThreadPoolExecutor` to perform vectorized searches across multiple CPU cores, achieving >900 parameter combinations per second.
 - **Interactive Dashboard**: 
   - Powerful Streamlit app with reactive analysis.
   - Interactive Plotly visualizations with zoom, pan, and hover details.
@@ -103,6 +107,24 @@ If you run the CLI without specific parameter arguments, it defaults to:
 *   **Bump/Slide Threshold**: 3.0 to 10.0 (Step 0.5)
 *   **Size Vol**: Locked at 0
 *   **Up %**: Locked at 0
+
+#### Optimized Catalog Search
+For exhaustive searches (e.g., checking thousands of window size combinations), you should use the pre-computed Window Catalog.
+
+1. **Build the Catalog** (Run once):
+   ```bash
+   python goal_seek_cli.py --build-catalog --catalog-max-len 360
+   ```
+   *   Generates `catalog/change_matrix.npy` (~2GB) and `catalog/metadata.npz` (~50MB).
+   *   `--catalog-max-len` sets the maximum window size in minutes (default 360).
+
+2. **Run Fast Search**:
+   Add the `--use-catalog` flag to your command.
+   ```bash
+   python goal_seek_cli.py --use-catalog --target-cr 60 --bump-len-start 15 --bump-len-end 60
+   ```
+   *   Uses the pre-computed data for instant lookups.
+   *   Supports multi-threaded execution automatically.
 
 #### Understanding Progress Logs
 During execution, you will see logs like:

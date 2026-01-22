@@ -31,7 +31,31 @@ def render_results(results, stats, config, df_filtered, val_report=None):
 
     # Display Results
     if not results.empty:
-        st.metric("Matches Found", len(results))
+        col1, col2 = st.columns([2, 8])
+        with col1:
+            st.metric("Matches Found", len(results))
+        with col2:
+            # Prepare CSV data with clear time columns
+            csv_df = results.copy()
+            csv_df = csv_df.rename(columns={'date': 'bump_start_date'})
+            
+            # Reorder columns for clarity
+            desired_order = [
+                'bump_start_date', 'bump_end_date', 'slide_start_date', 'slide_end_date',
+                'bump_change', 'slide_change', 
+                'bump_vol', 'slide_vol',
+                'bump_up_pct', 'slide_up_pct',
+                'bump_start_price', 'bump_end_price', 'slide_start_price', 'slide_end_price'
+            ]
+            # Ensure we only use columns that exist
+            cols_to_export = [c for c in desired_order if c in csv_df.columns]
+            
+            st.download_button(
+                label="📥 Download Results CSV",
+                data=csv_df[cols_to_export].to_csv(index=False),
+                file_name="bump_slide_results.csv",
+                mime="text/csv"
+            )
         
         # Define render functions for reordering
         def render_table():

@@ -5,7 +5,15 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Window Catalog**: Implemented a "Hybrid Catalog" system for ultra-fast Goal Seek performance.
+  - **Pre-parsed Data**: Stores pre-computed Price Change matrices (Memory-Mapped) and Cumulative Volume/Up-Count arrays.
+  - **Parallel Search**: Added `CatalogSearcher` which uses multi-threaded vector operations to search millions of combinations in seconds.
+  - **CLI Commands**: Added `--build-catalog` to generate data and `--use-catalog` to search using the optimized engine.
 - **Goal Seek**: Added `--min-bumps` argument to filter results by a minimum number of pattern occurrences.
+
+### Changed
+- **Goal Seek Filtering**: Implemented **Non-Maximum Suppression (NMS)** in both Standard and Catalog search engines. This filters out overlapping pattern matches, preserving only the instance with the highest slide magnitude to ensure accurate conversion rates.
+- **CLI Arguments**: Simplified threshold parameters. Replaced range-based arguments (`--bump-thresh-start/end/step`) with single minimum threshold arguments (`--min-bump-threshold`, `--min-slide-threshold`). The search now treats these as fixed minimum requirements rather than optimization variables.
 
 ## [0.2.0] - 2026-01-20
 

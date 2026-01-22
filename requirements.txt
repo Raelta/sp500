@@ -4,3 +4,4 @@ plotly
 pyarrow
 pytest
 hypothesis
+tqdm
