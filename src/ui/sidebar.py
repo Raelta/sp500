@@ -117,8 +117,8 @@ def render_sidebar(df, cli_args):
     mbv_default = cli_args.min_bump_vol if cli_args.min_bump_vol is not None else 0
     msv_default = cli_args.min_slide_vol if cli_args.min_slide_vol is not None else 0
 
-    min_bump_vol = st.sidebar.number_input("Min Bump Volume", min_value=0, value=mbv_default, step=1000, help="Minimum total volume traded during the Bump period.")
-    min_slide_vol = st.sidebar.number_input("Min Slide Volume", min_value=0, value=msv_default, step=1000, help="Minimum total volume traded during the Slide period.")
+    min_bump_vol = st.sidebar.number_input("Min Bump Size Vol", min_value=0, value=mbv_default, step=1000, help="Minimum Size Vol (Volume * Price Change) during the Bump period.")
+    min_slide_vol = st.sidebar.number_input("Min Slide Size Vol", min_value=0, value=msv_default, step=1000, help="Minimum Size Vol (Volume * Price Change) during the Slide period.")
 
     st.sidebar.subheader("Time of Day (Bump Start)")
     time_start = st.sidebar.time_input("Start Time", time(9, 30), help="Only include patterns starting after this time.")

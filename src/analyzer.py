@@ -33,17 +33,20 @@ def find_bumps_and_slides(
     slide_up_pct: Minimum percentage of Up candles (Close > Open) in slide
     """
     
-    # 1. Pre-calculate Volume Sums (Rolling)
+    # 1. Pre-calculate Size Volume Sums (Rolling)
     if progress_callback: progress_callback("Calculating volume metrics...", 10)
+    
+    # SizeVol = Volume * |Close - Open|
+    size_vol_series = df['volume'] * (df['close'] - df['open']).abs()
     
     # rolling sum aligns to the right edge of window, so we shift back to align to start
     # We need rolling sum for bump_len and slide_len
     
-    # Bump Volume (sum from i to i + bump_len - 1)
-    bump_vol = df['volume'].rolling(window=bump_len).sum().shift(-(bump_len - 1))
+    # Bump Size Volume (sum from i to i + bump_len - 1)
+    bump_vol = size_vol_series.rolling(window=bump_len).sum().shift(-(bump_len - 1))
     
-    # Slide Volume (sum from i + bump_len to i + bump_len + slide_len - 1)
-    slide_vol = df['volume'].rolling(window=slide_len).sum().shift(-(bump_len + slide_len - 1))
+    # Slide Size Volume (sum from i + bump_len to i + bump_len + slide_len - 1)
+    slide_vol = size_vol_series.rolling(window=slide_len).sum().shift(-(bump_len + slide_len - 1))
 
     # 2. Calculate Price Changes & Consistency
     if progress_callback: progress_callback("Analyzing price changes...", 30)

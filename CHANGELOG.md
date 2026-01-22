@@ -11,7 +11,15 @@ All notable changes to this project will be documented in this file.
   - **Smart Search Engine**: Optimized algorithm that groups structural parameters to maximize search performance (`src/search_engine.py`).
   - **Variable Parameter Search**: UI to "Lock" specific parameters while varying others across a defined range.
   - **Compact Layout**: Optimized 2-column interface to minimize scrolling during configuration.
-  - **Mode Selection**: Switch between "Standard Analysis" and "Goal Seek" modes via the sidebar.
+  - **Performance Optimization**: 
+    - **Data-Driven Pruning**: Instantly discards impossible parameter combinations based on data limits.
+    - **Parallel Processing**: Uses multi-core processing to execute search tasks concurrently.
+    - **Vectorized Broadcasting**: Replaced the inner search loop with NumPy matrix operations, enabling near-instant checking of thousands of threshold combinations.
+  - **Metrics**: Updated "Volume" parameter to "Size Volume" (Price Change * Volume) and switched Yearly Stats from Mean to Median.
+  - **Visualization**: Enhanced charts to remove time gaps (using Category Axis) and indicate session breaks with vertical lines.
+
+### Changed
+- **UI Cleanup**: Removed "Goal Seek" mode from the web interface to focus on Standard Analysis. Goal Seek functionality is now exclusive to the CLI (`goal_seek_cli.py`).
 
 ## [0.1.0] - 2025-12-27
 

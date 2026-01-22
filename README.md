@@ -10,6 +10,10 @@ A Python application designed to analyze intraday SPY (S&P 500 ETF) data for "Bu
 - **Goal Seek / Reverse Search**:
   - Define a target Conversion Rate and find parameter combinations that achieve it.
   - "Lock" specific parameters while varying others across a range.
+  - **High Performance**:
+    - **Parallel Processing**: Utilizes all available CPU cores to execute the search concurrently.
+    - **Vectorized Broadcasting**: Uses NumPy matrix multiplication to check thousands of parameter combinations simultaneously, eliminating slow loops.
+    - **Smart Pruning**: Automatically discards impossible parameter combinations based on data limits.
 - **Interactive Dashboard**: 
   - Powerful Streamlit app with reactive analysis.
   - Interactive Plotly visualizations with zoom, pan, and hover details.
@@ -57,15 +61,6 @@ streamlit run app.py
 *   **Selection**: Click any row in the **Matches Table** to view the visualization. Click column headers to sort.
 *   **Layout**: Use the "App Layout" toggle to customize your workspace.
 
-### Goal Seek Mode
-
-Switch to **Goal Seek** mode via the sidebar to perform reverse analysis.
-
-1.  **Set Target**: Define your desired Conversion Rate (Hit Ratio).
-2.  **Lock Parameters**: Use the Sidebar to set "Fixed" values for parameters you want to constrain.
-3.  **Vary Parameters**: In the main view, check "Vary" for parameters you want to search. Define the Start, End, and Step for each.
-4.  **Run**: Click "Run Goal Seek Search" to find all combinations meeting your target.
-
 #### Command Line Overrides
 
 You can launch the app with custom parameter defaults using command-line arguments. Append your flags after a `--` separator.
@@ -83,8 +78,37 @@ streamlit run app.py -- --bump-len 10 --bump-thresh 0.1
 - `-sl`, `--slide-len`: Slide Length (min)
 - `-st`, `--slide-thresh`: Slide Threshold
 - `--slide-type`: 'percent' or 'value'
-- `--min-bump-vol`: Min Bump Volume
-- `--min-slide-vol`: Min Slide Volume
+- `--min-bump-vol`: Min Bump Size Vol
+- `--min-slide-vol`: Min Slide Size Vol
+
+### Goal Seek CLI
+
+You can also run the Goal Seek analysis directly from the terminal without the web interface.
+
+```bash
+python goal_seek_cli.py --target-cr 60 --top-n 10
+```
+
+**Common Arguments:**
+- `--target-cr`: Minimum Conversion Rate (default 50.0)
+- `--top-n`: Number of top results to display (default 20)
+- `--output`: Output CSV filename (default `goal_seek_results.csv`)
+- **Ranges**: Define ranges for parameters using `--[name]-start`, `--[name]-end`, `--[name]-step`.
+  - Example: `--bump-len-start 3 --bump-len-end 5 --bump-len-step 1`
+
+#### Default Ranges (if unspecified)
+If you run the CLI without specific parameter arguments, it defaults to:
+*   **Bump/Slide Length**: 3 to 6 (Step 1)
+*   **Bump/Slide Threshold**: 3.0 to 10.0 (Step 0.5)
+*   **Size Vol**: Locked at 0
+*   **Up %**: Locked at 0
+
+#### Understanding Progress Logs
+During execution, you will see logs like:
+`[33.3%] Analyzing structure 8/24...`
+
+*   **Structure**: Refers to a unique combination of **Bump Length** and **Slide Length**. These are the "heavy" parameters that require re-scanning the dataset.
+*   **Optimization**: Inside each "Structure", the engine tests hundreds of Threshold/Volume combinations almost instantly using vectorized operations and Data-Driven Pruning.
 
 ## Project Structure
 
@@ -109,7 +133,6 @@ streamlit run app.py -- --bump-len 10 --bump-thresh 0.1
     │   └── data_generator.py # Synthetic data generation logic
     └── ui/                 # UI Component Package
         ├── __init__.py
-        ├── goal_seek.py    # Goal Seek UI logic
         ├── results.py      # Logic for displaying tables, charts, and stats
         ├── sidebar.py      # Logic for rendering the configuration sidebar
         └── utils.py        # Shared UI utilities and helpers

@@ -36,11 +36,24 @@ def render_results(results, stats, config, df_filtered, val_report=None):
         # Define render functions for reordering
         def render_table():
             st.subheader("Matches")
-            st.caption("Click a row to visualize it.")
+            st.caption("Click a row to visualize it. (Multi-day matches are highlighted)")
+            
+            # Prepare Highlighted Data
+            # Create a helper column to identify multi-day patterns
+            results_display = results.copy()
+            results_display['is_multiday'] = results_display['date'].dt.date != results_display['slide_end_date'].dt.date
+            
+            def highlight_multiday(row):
+                if row['is_multiday']:
+                    return ['background-color: #FFF9C4; color: black'] * len(row) # Light Yellow
+                return [''] * len(row)
+            
+            # Apply Style
+            styled_results = results_display.style.apply(highlight_multiday, axis=1)
             
             # Interactive Table
             event = st.dataframe(
-                results, 
+                styled_results, 
                 width="stretch",
                 on_select="rerun",
                 selection_mode="single-row",
@@ -49,8 +62,9 @@ def render_results(results, stats, config, df_filtered, val_report=None):
                     "date": st.column_config.DatetimeColumn("Bump Start", format="YYYY-MM-DD HH:mm"),
                     "bump_change": st.column_config.NumberColumn("Bump Change %", format="%.2f"),
                     "slide_change": st.column_config.NumberColumn("Slide Change %", format="%.2f"),
-                    "bump_vol": st.column_config.NumberColumn("Bump Vol"),
-                    "slide_vol": st.column_config.NumberColumn("Slide Vol"),
+                    "bump_vol": st.column_config.NumberColumn("Bump Size Vol"),
+                    "slide_vol": st.column_config.NumberColumn("Slide Size Vol"),
+                    "is_multiday": None, # Hide helper column
                 },
                 hide_index=True 
             )
@@ -58,6 +72,7 @@ def render_results(results, stats, config, df_filtered, val_report=None):
             # Handle Table Selection
             if len(event.selection.rows) > 0:
                 selected_row_numeric_idx = event.selection.rows[0]
+                # Map back to original results index using the same positional index
                 new_idx = results.index[selected_row_numeric_idx]
                 if 'selected_match_idx' not in st.session_state or new_idx != st.session_state.selected_match_idx:
                     st.session_state.selected_match_idx = new_idx

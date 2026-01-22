@@ -2,6 +2,162 @@ import pandas as pd
 import numpy as np
 import itertools
 from src.analyzer import calculate_change
+from concurrent.futures import ProcessPoolExecutor, as_completed
+import os
+
+def _process_structure(df_search, s_dict, filter_keys, filter_values, target_cr_min):
+    """
+    Worker function to process a single structural configuration.
+    Uses Vectorized Broadcasting (Matrix Multiplication) to check all filter combinations efficiently.
+    """
+    # --- HEAVY CALCULATION (Structural) ---
+    bump_len = int(s_dict['bump_len'])
+    slide_len = int(s_dict['slide_len'])
+    
+    # SizeVol Calculation
+    size_vol_series = df_search['volume'] * (df_search['close'] - df_search['open']).abs()
+    
+    # Rolling Volumes (Size Volume)
+    bump_vol = size_vol_series.rolling(window=bump_len).sum().shift(-(bump_len - 1))
+    slide_vol = size_vol_series.rolling(window=slide_len).sum().shift(-(bump_len + slide_len - 1))
+    
+    # Changes
+    bump_open = df_search['open']
+    bump_close = df_search['close'].shift(-(bump_len - 1))
+    bump_change = calculate_change(bump_open, bump_close, s_dict['bump_thresh_type'])
+    
+    slide_open = df_search['open'].shift(-bump_len)
+    slide_close = df_search['close'].shift(-(bump_len + slide_len - 1))
+    slide_change = calculate_change(slide_open, slide_close, s_dict['slide_thresh_type'])
+    
+    # Up Percents
+    is_up = (df_search['close'] > df_search['open']).astype(int)
+    bump_up_pct = is_up.rolling(window=bump_len).mean().shift(-(bump_len - 1)) * 100
+    slide_up_pct = is_up.rolling(window=slide_len).mean().shift(-(bump_len + slide_len - 1)) * 100
+    
+    # Pre-calculate absolute changes
+    bump_change_abs = bump_change.abs()
+    slide_change_abs = slide_change.abs()
+    
+    # --- OPTIMIZATION: Data-Driven Pruning ---
+    max_vals = {
+        'bump_threshold': bump_change_abs.max(),
+        'slide_threshold': slide_change_abs.max(),
+        'min_bump_vol': bump_vol.max(),
+        'min_slide_vol': slide_vol.max(),
+        'bump_up_pct': bump_up_pct.max(),
+        'slide_up_pct': slide_up_pct.max()
+    }
+    
+    pruned_filter_values = []
+    
+    for i, key in enumerate(filter_keys):
+        original_values = filter_values[i]
+        current_max = max_vals.get(key, float('inf'))
+        
+        if pd.isna(current_max):
+            pruned_values = []
+        else:
+            pruned_values = [v for v in original_values if v <= current_max]
+        
+        pruned_filter_values.append(pruned_values)
+    
+    if any(len(lst) == 0 for lst in pruned_filter_values):
+        return []
+
+    # --- VECTORIZED BROADCASTING ---
+    # We assume filter_keys order: 
+    # 0: bump_thresh, 1: slide_thresh, 2: bump_vol, 3: slide_vol, 4: bump_up, 5: slide_up
+    
+    bump_indices = [0, 2, 4]
+    slide_indices = [1, 3, 5]
+    
+    bump_pruned = [pruned_filter_values[i] for i in bump_indices]
+    slide_pruned = [pruned_filter_values[i] for i in slide_indices]
+    
+    # Generate partial combinations
+    bump_combos = list(itertools.product(*bump_pruned))
+    slide_combos = list(itertools.product(*slide_pruned))
+    
+    n_rows = len(df_search)
+    
+    # Metrics map
+    metrics = [bump_change_abs, slide_change_abs, bump_vol, slide_vol, bump_up_pct, slide_up_pct]
+    
+    # 1. Pre-calculate Masks
+    # mask_cache[key][val] = boolean array
+    mask_cache = {}
+    for idx, key in enumerate(filter_keys):
+        metric = metrics[idx].to_numpy()
+        # Handle NaNs: treat as impossible (-inf)
+        metric = np.nan_to_num(metric, nan=-np.inf)
+        
+        mask_cache[key] = {}
+        for val in pruned_filter_values[idx]:
+            mask_cache[key][val] = (metric >= val)
+            
+    # 2. Build Matrices (N, Combos)
+    def build_matrix(indices, combos):
+        cols = []
+        for combo in combos:
+            final_mask = None
+            for i, val in enumerate(combo):
+                key_idx = indices[i]
+                key = filter_keys[key_idx]
+                mask = mask_cache[key][val]
+                if final_mask is None:
+                    final_mask = mask
+                else:
+                    final_mask = final_mask & mask
+            cols.append(final_mask)
+        
+        if not cols:
+            return np.zeros((n_rows, 0), dtype=bool)
+        return np.stack(cols, axis=1)
+
+    bump_matrix = build_matrix(bump_indices, bump_combos) # (N, B)
+    slide_matrix = build_matrix(slide_indices, slide_combos) # (N, S)
+    
+    # 3. Matrix Multiplication
+    # Hits(B, S) = bump_matrix.T @ slide_matrix
+    # Use float32 to prevent overflow (int8 is too small for counts)
+    hits_matrix = np.dot(bump_matrix.T.astype(np.float32), slide_matrix.astype(np.float32))
+    
+    # 4. Total Bumps (B,)
+    total_bumps_vec = bump_matrix.sum(axis=0)
+    
+    # 5. CR Matrix (B, S)
+    # CR = Hits / Total * 100
+    with np.errstate(divide='ignore', invalid='ignore'):
+        cr_matrix = (hits_matrix / total_bumps_vec[:, None]) * 100
+        cr_matrix = np.nan_to_num(cr_matrix, nan=0.0)
+        
+    # 6. Filter & Reconstruct
+    valid_mask = (cr_matrix >= target_cr_min) & (total_bumps_vec[:, None] > 0)
+    b_indices, s_indices = np.where(valid_mask)
+    
+    local_results = []
+    
+    bump_keys_names = [filter_keys[i] for i in bump_indices]
+    slide_keys_names = [filter_keys[i] for i in slide_indices]
+    
+    for b, s in zip(b_indices, s_indices):
+        res = s_dict.copy()
+        
+        # Add Bump Params
+        for k, v in zip(bump_keys_names, bump_combos[b]):
+            res[k] = v
+        # Add Slide Params
+        for k, v in zip(slide_keys_names, slide_combos[s]):
+            res[k] = v
+            
+        res['total_bumps'] = int(total_bumps_vec[b])
+        res['hits'] = int(hits_matrix[b, s])
+        res['conversion_rate'] = float(cr_matrix[b, s])
+        
+        local_results.append(res)
+            
+    return local_results
 
 class GoalSeeker:
     def __init__(self, df):
@@ -9,23 +165,7 @@ class GoalSeeker:
 
     def search(self, params_grid, fixed_params=None, target_cr_min=0, progress_callback=None):
         """
-        Executes an exhaustive search over the provided parameter grid.
-        
-        Args:
-            params_grid: Dictionary where keys are parameter names and values are lists of values to test.
-                         Keys expected: 
-                         - bump_len, slide_len
-                         - bump_thresh_type, slide_thresh_type
-                         - bump_threshold, slide_threshold
-                         - min_bump_vol, min_slide_vol
-                         - bump_up_pct, slide_up_pct
-            fixed_params: Dictionary of parameters that are constant for this search.
-                          Used primarily for 'time_range' and 'days_of_week' pre-filtering.
-            target_cr_min: Minimum Conversion Rate (Hit Ratio) to include in results.
-            progress_callback: Function accepting (message, percentage_float).
-            
-        Returns:
-            pd.DataFrame of results.
+        Executes an exhaustive search over the provided parameter grid using Multiprocessing and Vectorization.
         """
         # 1. Apply Global Filters (Time/Day) if present in fixed_params
         df_search = self.df.copy()
@@ -33,8 +173,6 @@ class GoalSeeker:
         if fixed_params:
             if 'time_range' in fixed_params:
                 start_t, end_t = fixed_params['time_range']
-                # Filter by time (using index or date column if datetime)
-                # Assuming 'date' column exists and is datetime
                 times = df_search['date'].dt.time
                 if start_t <= end_t:
                     df_search = df_search[(times >= start_t) & (times <= end_t)]
@@ -45,14 +183,8 @@ class GoalSeeker:
                 df_search = df_search[df_search['date'].dt.day_name().isin(fixed_params['days_of_week'])]
 
         # 2. Define Parameter Groups
-        # Structural: Requires dataframe recalculation (Rolling windows, Change calculation based on type)
         structural_keys = ['bump_len', 'slide_len', 'bump_thresh_type', 'slide_thresh_type']
-        
-        # Filter: Lightweight boolean masking
         filter_keys = ['bump_threshold', 'slide_threshold', 'min_bump_vol', 'min_slide_vol', 'bump_up_pct', 'slide_up_pct']
-        
-        # Extract values for the grid, using fixed_params as fallback for single values
-        # If a key is in params_grid, use it. If not, check fixed_params. If neither, default (though UI should handle this).
         
         def get_param_values(key, default=[None]):
             if key in params_grid:
@@ -64,79 +196,83 @@ class GoalSeeker:
         struct_values = [get_param_values(k) for k in structural_keys]
         filter_values = [get_param_values(k) for k in filter_keys]
         
-        # 3. Execute Search
+        # 3. Execute Search with Parallel Processing
         results = []
         
-        # Calculate total structural iterations for progress
-        total_structs = np.prod([len(v) for v in struct_values])
-        current_struct_idx = 0
+        max_workers = os.cpu_count() or 1
         
-        for struct_combo in itertools.product(*struct_values):
-            current_struct_idx += 1
-            s_dict = dict(zip(structural_keys, struct_combo))
-            
-            # Update Progress
-            if progress_callback:
-                progress_callback(f"Analyzing structure {current_struct_idx}/{total_structs}...", current_struct_idx / total_structs)
-            
-            # --- HEAVY CALCULATION ---
-            bump_len = int(s_dict['bump_len'])
-            slide_len = int(s_dict['slide_len'])
-            
-            # Rolling Volumes
-            # shift(-(window - 1)) aligns the rolling window to start at 'i'
-            bump_vol = df_search['volume'].rolling(window=bump_len).sum().shift(-(bump_len - 1))
-            slide_vol = df_search['volume'].rolling(window=slide_len).sum().shift(-(bump_len + slide_len - 1))
-            
-            # Changes
-            bump_open = df_search['open']
-            bump_close = df_search['close'].shift(-(bump_len - 1))
-            bump_change = calculate_change(bump_open, bump_close, s_dict['bump_thresh_type'])
-            
-            slide_open = df_search['open'].shift(-bump_len)
-            slide_close = df_search['close'].shift(-(bump_len + slide_len - 1))
-            slide_change = calculate_change(slide_open, slide_close, s_dict['slide_thresh_type'])
-            
-            # Up Percents
-            is_up = (df_search['close'] > df_search['open']).astype(int)
-            bump_up_pct = is_up.rolling(window=bump_len).mean().shift(-(bump_len - 1)) * 100
-            slide_up_pct = is_up.rolling(window=slide_len).mean().shift(-(bump_len + slide_len - 1)) * 100
-            
-            # Pre-calculate absolute changes for filtering
-            bump_change_abs = bump_change.abs()
-            slide_change_abs = slide_change.abs()
-            
-            # --- INNER LOOP (FILTERS) ---
-            # Iterate through all filter combinations
-            for filter_combo in itertools.product(*filter_values):
-                f_dict = dict(zip(filter_keys, filter_combo))
-                
-                # Create Masks
-                # Using numpy/pandas vectorization
-                # We do this for every filter combo. It's fast but doing it 10k times adds up.
-                # Ideally, we could sort and slice, but brute force boolean is simplest to implement correctly first.
-                
-                bump_mask = (bump_change_abs >= f_dict['bump_threshold']) & \
-                            (bump_vol >= f_dict['min_bump_vol']) & \
-                            (bump_up_pct >= f_dict['bump_up_pct'])
-                
-                slide_mask = (slide_change_abs >= f_dict['slide_threshold']) & \
-                             (slide_vol >= f_dict['min_slide_vol']) & \
-                             (slide_up_pct >= f_dict['slide_up_pct'])
-                
-                # Stats
-                total_bumps = bump_mask.sum()
-                hits = (bump_mask & slide_mask).sum()
-                
-                hit_ratio = (hits / total_bumps * 100) if total_bumps > 0 else 0.0
-                
-                if hit_ratio >= target_cr_min and total_bumps > 0:
-                    # Record Result
-                    # Combine all params
-                    res = {**s_dict, **f_dict}
-                    res['total_bumps'] = int(total_bumps)
-                    res['hits'] = int(hits)
-                    res['conversion_rate'] = hit_ratio
-                    results.append(res)
+        struct_combos = list(itertools.product(*struct_values))
+        total_structs = len(struct_combos)
         
-        return pd.DataFrame(results)
+        with ProcessPoolExecutor(max_workers=max_workers) as executor:
+            future_to_struct = {}
+            
+            for struct_combo in struct_combos:
+                s_dict = dict(zip(structural_keys, struct_combo))
+                # Submit task
+                future = executor.submit(
+                    _process_structure, 
+                    df_search, 
+                    s_dict, 
+                    filter_keys, 
+                    filter_values, 
+                    target_cr_min
+                )
+                future_to_struct[future] = s_dict
+            
+            # Handle results
+            completed_count = 0
+            for future in as_completed(future_to_struct):
+                completed_count += 1
+                s_dict = future_to_struct[future]
+                
+                # Update Progress
+                if progress_callback:
+                    struct_desc = ", ".join([f"{k}={v}" for k, v in s_dict.items()])
+                    progress_callback(f"Analyzing structure {completed_count}/{total_structs}: {struct_desc}", completed_count / total_structs)
+                
+                try:
+                    data = future.result()
+                    if data:
+                        results.extend(data)
+                except Exception as exc:
+                    print(f"Structure generation exception: {exc}")
+        
+        # --- Post-process: Add CLI Command for reproduction ---
+        if results:
+            cli_mapping = {
+                'bump_len': 'bump-len',
+                'slide_len': 'slide-len',
+                'bump_threshold': 'bump-thresh',
+                'slide_threshold': 'slide-thresh',
+                'min_bump_vol': 'bump-vol',
+                'min_slide_vol': 'slide-vol',
+                'bump_up_pct': 'bump-up',
+                'slide_up_pct': 'slide-up'
+            }
+            
+            for res in results:
+                parts = ["python goal_seek_cli.py"]
+                for key, cli_arg in cli_mapping.items():
+                    val = res.get(key)
+                    if val is not None:
+                        # Use step=0 to lock the range to this specific value
+                        parts.append(f"--{cli_arg}-start {val} --{cli_arg}-end {val} --{cli_arg}-step 0")
+                
+                # Ensure target CR allows this result to show (set to 0)
+                parts.append("--target-cr 0")
+                
+                res['cli_command'] = " ".join(parts)
+
+        df_results = pd.DataFrame(results)
+        
+        if not df_results.empty:
+            # Add Scope Metadata to confirm what data was used
+            df_results['scope_start'] = df_search['date'].min()
+            df_results['scope_end'] = df_search['date'].max()
+            # unique days names
+            days_str = ",".join(sorted(df_search['date'].dt.day_name().unique()))
+            df_results['scope_days'] = days_str
+            df_results['scope_rows'] = len(df_search)
+            
+        return df_results
