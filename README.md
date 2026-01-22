@@ -91,6 +91,7 @@ python goal_seek_cli.py --target-cr 60 --top-n 10
 
 **Common Arguments:**
 - `--target-cr`: Minimum Conversion Rate (default 50.0)
+- `--min-bumps`: Minimum Total Bumps required (default 0)
 - `--top-n`: Number of top results to display (default 20)
 - `--output`: Output CSV filename (default `goal_seek_results.csv`)
 - **Ranges**: Define ranges for parameters using `--[name]-start`, `--[name]-end`, `--[name]-step`.

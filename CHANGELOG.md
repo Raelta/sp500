@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- **Goal Seek**: Added `--min-bumps` argument to filter results by a minimum number of pattern occurrences.
+
 ## [0.2.0] - 2026-01-20
 
 ### Added

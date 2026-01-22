@@ -5,7 +5,7 @@ from src.analyzer import calculate_change
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import os
 
-def _process_structure(df_search, s_dict, filter_keys, filter_values, target_cr_min):
+def _process_structure(df_search, s_dict, filter_keys, filter_values, target_cr_min, min_bumps=0):
     """
     Worker function to process a single structural configuration.
     Uses Vectorized Broadcasting (Matrix Multiplication) to check all filter combinations efficiently.
@@ -133,7 +133,7 @@ def _process_structure(df_search, s_dict, filter_keys, filter_values, target_cr_
         cr_matrix = np.nan_to_num(cr_matrix, nan=0.0)
         
     # 6. Filter & Reconstruct
-    valid_mask = (cr_matrix >= target_cr_min) & (total_bumps_vec[:, None] > 0)
+    valid_mask = (cr_matrix >= target_cr_min) & (total_bumps_vec[:, None] >= min_bumps) & (total_bumps_vec[:, None] > 0)
     b_indices, s_indices = np.where(valid_mask)
     
     local_results = []
@@ -163,7 +163,7 @@ class GoalSeeker:
     def __init__(self, df):
         self.df = df.copy()
 
-    def search(self, params_grid, fixed_params=None, target_cr_min=0, progress_callback=None):
+    def search(self, params_grid, fixed_params=None, target_cr_min=0, min_bumps=0, progress_callback=None):
         """
         Executes an exhaustive search over the provided parameter grid using Multiprocessing and Vectorization.
         """
@@ -216,7 +216,8 @@ class GoalSeeker:
                     s_dict, 
                     filter_keys, 
                     filter_values, 
-                    target_cr_min
+                    target_cr_min,
+                    min_bumps
                 )
                 future_to_struct[future] = s_dict
             

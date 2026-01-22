@@ -16,6 +16,9 @@ Examples:
   # Run with custom ranges
   python goal_seek_cli.py --target-cr 75 --bump-len-start 5 --bump-len-end 10 --bump-thresh-start 5
 
+  # Run with minimum bumps filter
+  python goal_seek_cli.py --target-cr 60 --min-bumps 10
+
 Available Parameter Ranges:
   For each parameter [name], you can specify:
     --[name]-start: Start value of the range
@@ -37,6 +40,7 @@ Available Parameter Ranges:
     # Global Config
     parser.add_argument("--data", default="spy_data.parquet", help="Path to data file")
     parser.add_argument("--target-cr", type=float, default=50.0, help="Minimum Target Conversion Rate (Hit Ratio %%)")
+    parser.add_argument("--min-bumps", type=int, default=0, help="Minimum Total Bumps Required")
     parser.add_argument("--top-n", type=int, default=20, help="Number of top results to display")
     parser.add_argument("--output", default="goal_seek_results.csv", help="Output CSV filename")
     
@@ -114,6 +118,7 @@ def main():
     print(f"--- Goal Seek CLI ---")
     print(f"Data: {args.data}")
     print(f"Target CR: >={args.target_cr}%")
+    print(f"Min Bumps: >={args.min_bumps}")
     
     # Load Data
     try:
@@ -190,7 +195,13 @@ def main():
     # Run Search (target_cr_min=0 to get all results, then filter/sort)
     # Passing 0.0 allows us to see "Best CR" even if it's below target.
     try:
-        results = seeker.search(params_grid, fixed_params, target_cr_min=0.0, progress_callback=progress)
+        results = seeker.search(
+            params_grid, 
+            fixed_params, 
+            target_cr_min=0.0, 
+            min_bumps=args.min_bumps,
+            progress_callback=progress
+        )
         print("\n\nSearch Complete.")
     except KeyboardInterrupt:
         print("\nSearch interrupted.")
