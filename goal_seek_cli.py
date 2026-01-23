@@ -13,13 +13,13 @@ def parse_args():
     epilog = """
 Examples:
   # Run with default settings (Lengths 3-6, Thresholds >= 3.0)
-  python goal_seek_cli.py --target-cr 60
+  python goal_seek_cli.py
 
   # Run with custom length ranges and higher thresholds
-  python goal_seek_cli.py --target-cr 75 --bump-len-start 5 --bump-len-end 10 --min-bump-threshold 5.0
+  python goal_seek_cli.py --bump-len-start 5 --bump-len-end 10 --min-bump-threshold 5.0
 
   # Run with minimum bumps filter
-  python goal_seek_cli.py --target-cr 60 --min-bumps 10
+  python goal_seek_cli.py --min-bumps 10
 
 Available Parameter Ranges:
   For LENGTH parameters [name], you can specify:
@@ -46,7 +46,6 @@ Available Parameter Ranges:
     
     # Global Config
     parser.add_argument("--data", default="spy_data.parquet", help="Path to data file")
-    parser.add_argument("--target-cr", type=float, default=50.0, help="Minimum Target Conversion Rate (Hit Ratio %%)")
     parser.add_argument("--min-bumps", type=int, default=0, help="Minimum Total Bumps Required")
     parser.add_argument("--top-n", type=int, default=20, help="Number of top results to display")
     parser.add_argument("--output", default="goal_seek_results.csv", help="Output CSV filename")
@@ -133,7 +132,6 @@ def main():
     
     print(f"--- Goal Seek CLI ---")
     print(f"Data: {args.data}")
-    print(f"Target CR: >={args.target_cr}%")
     print(f"Min Bumps: >={args.min_bumps}")
     
     # Handle Catalog Build
@@ -225,13 +223,12 @@ def main():
         print("Using Standard GoalSeeker...")
         seeker = GoalSeeker(df)
     
-    # Run Search (target_cr_min=0 to get all results, then filter/sort)
-    # Passing 0.0 allows us to see "Best CR" even if it's below target.
+    # Run Search
     try:
         results = seeker.search(
             params_grid, 
             fixed_params, 
-            target_cr_min=0.0, 
+            target_cr_min=0.0, # Ignored by search engine now
             min_bumps=args.min_bumps,
             progress_callback=progress,
             detailed=args.detailed
@@ -254,12 +251,12 @@ def main():
         
     # --- Reporting ---
     
-    # Best CR
-    best_cr = results['conversion_rate'].max()
-    print(f"Highest Conversion Rate Found: {best_cr:.2f}%")
+    # Best Hits
+    best_hits = results['total_hits'].max()
+    print(f"Highest Total Hits Found: {best_hits}")
     
-    # Sort
-    results_sorted = results.sort_values('conversion_rate', ascending=False)
+    # Sort by Total Hits Descending
+    results_sorted = results.sort_values('total_hits', ascending=False)
     
     # Dump CSV (Top 1000)
     csv_limit = 1000
@@ -272,9 +269,7 @@ def main():
     top_n = results_sorted.head(args.top_n)
     
     # Select key columns for display
-    # If detailed, we might want to show dates too? 
-    # But usually terminal width is limited.
-    cols = ['conversion_rate', 'hits', 'total_bumps', 
+    cols = ['total_hits', 'true_hits', 'total_bumps', 
             'bump_len', 'slide_len', 
             'bump_threshold', 'slide_threshold', 
             'min_bump_vol', 'min_slide_vol']

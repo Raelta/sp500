@@ -37,7 +37,8 @@ def test_goal_seeker_basic():
     results = seeker.search(params_grid, fixed_params, target_cr_min=0)
     
     assert not results.empty
-    assert 'conversion_rate' in results.columns
+    assert 'total_hits' in results.columns
+    assert 'true_hits' in results.columns
     # With always up candles and linear price increase:
     # Bump (5 mins): Price increases. Change is positive.
     # Slide (5 mins): Price increases. Change is positive.

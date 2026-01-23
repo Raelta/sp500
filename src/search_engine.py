@@ -126,14 +126,11 @@ def _process_structure(df_search, s_dict, filter_keys, filter_values, target_cr_
     # 4. Total Bumps (B,)
     total_bumps_vec = bump_matrix.sum(axis=0)
     
-    # 5. CR Matrix (B, S)
-    # CR = Hits / Total * 100
-    with np.errstate(divide='ignore', invalid='ignore'):
-        cr_matrix = (hits_matrix / total_bumps_vec[:, None]) * 100
-        cr_matrix = np.nan_to_num(cr_matrix, nan=0.0)
-        
     # 6. Filter & Reconstruct
-    valid_mask = (cr_matrix >= target_cr_min) & (total_bumps_vec[:, None] >= min_bumps) & (total_bumps_vec[:, None] > 0)
+    # We filter by min_bumps and hits > 0.
+    # We ignore target_cr_min for filtering as requested ("eliminate conversion rate completely")
+    
+    valid_mask = (total_bumps_vec[:, None] >= min_bumps) & (total_bumps_vec[:, None] > 0) & (hits_matrix > 0)
     b_indices, s_indices = np.where(valid_mask)
     
     local_results = []
@@ -142,13 +139,14 @@ def _process_structure(df_search, s_dict, filter_keys, filter_values, target_cr_
     slide_keys_names = [filter_keys[i] for i in slide_indices]
     
     for b, s in zip(b_indices, s_indices):
-        # --- Overlap Filtering ---
+        # --- Overlap Filtering for True Hits ---
         # 1. Identify raw hits
         mask = bump_matrix[:, b] & slide_matrix[:, s]
         raw_hit_indices = np.where(mask)[0]
+        raw_hits = len(raw_hit_indices)
         
-        if len(raw_hit_indices) == 0:
-            filtered_hits = 0
+        if raw_hits == 0:
+            true_hits = 0
             filtered_hit_indices = []
         else:
             # 2. Get scores (Slide Change Abs)
@@ -175,16 +173,10 @@ def _process_structure(df_search, s_dict, filter_keys, filter_values, target_cr_
                     occupied[idx:end_idx] = True
             
             filtered_hit_indices = sorted(kept_indices) # Restore time order
-            filtered_hits = len(filtered_hit_indices)
+            true_hits = len(filtered_hit_indices)
 
-        # Recalculate CR
         total_b = int(total_bumps_vec[b])
-        new_cr = (filtered_hits / total_b * 100) if total_b > 0 else 0.0
         
-        # Apply strict filter on NEW CR
-        if new_cr < target_cr_min:
-            continue
-
         res = s_dict.copy()
         
         # Add Bump Params
@@ -195,13 +187,18 @@ def _process_structure(df_search, s_dict, filter_keys, filter_values, target_cr_
             res[k] = v
             
         res['total_bumps'] = total_b
-        res['hits'] = filtered_hits
-        res['conversion_rate'] = float(new_cr)
+        res['total_hits'] = raw_hits
+        res['true_hits'] = true_hits
+        res['hits'] = raw_hits # Alias for backwards compatibility, using Total Hits
         
         if detailed:
-            if res['hits'] > 0:
-                # Use filtered indices
-                hit_indices = np.array(filtered_hit_indices)
+            if raw_hits > 0:
+                # For detailed results, we return ALL overlapping hits (raw_hits)
+                # as the user wants to see "Total Hits"
+                hit_indices = raw_hit_indices
+                # Or do they want to see True Hits only? 
+                # "total hits: this all the bump/slide matches"
+                # So we should show all.
                 
                 # Extract Data Series (aligned)
                 # Use .values to avoid index issues if df_search has non-standard index

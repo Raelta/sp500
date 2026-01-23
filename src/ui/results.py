@@ -25,9 +25,9 @@ def render_results(results, stats, config, df_filtered, val_report=None):
         with st.expander("📊 Pattern Statistics (Hit Rate)", expanded=True):
             col1, col2, col3, col4 = st.columns(4)
             col1.metric("Total Bumps", stats['total_bumps'], help="Candidates matching Bump criteria")
-            col2.metric("Hits (Valid)", stats['hits'], help="Bumps followed by matching Slide")
-            col3.metric("Misses", stats['misses'], help="Bumps NOT followed by matching Slide")
-            col4.metric("Conversion Rate", f"{stats['hit_ratio']:.1f}%", help="Percentage of bumps that become valid patterns")
+            col2.metric("Total Hits", stats.get('total_hits', stats.get('hits', 0)), help="All overlapping patterns")
+            col3.metric("True Hits", stats.get('true_hits', 0), help="Best unique patterns (overlap removed)")
+            col4.metric("Misses", stats['misses'], help="Bumps NOT followed by matching Slide")
 
     # Display Results
     if not results.empty:

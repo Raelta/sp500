@@ -148,8 +148,11 @@ class CatalogSearcher:
                 
                 # Get raw indices
                 raw_hit_indices = np.where(final_mask)[0]
+                hits = len(raw_hit_indices)
                 
-                if len(raw_hit_indices) > 0:
+                # Calculate True Hits (Non-overlapping)
+                true_hits = 0
+                if hits > 0:
                     # --- Overlap Filtering ---
                     # Get scores (Slide Change Abs)
                     # s_change_abs is a numpy array defined earlier in the function
@@ -170,35 +173,35 @@ class CatalogSearcher:
                         if not occupied[idx:end_idx].any():
                             kept_indices.append(idx)
                             occupied[idx:end_idx] = True
-                    
-                    hits_indices = np.array(sorted(kept_indices))
-                    hits = len(hits_indices)
-                else:
-                    hits_indices = np.array([])
-                    hits = 0
+                            
+                    true_hits = len(kept_indices)
+
+                # We ignore target_cr_min check as requested
                 
-                if total_bumps > 0:
-                    cr = (hits / total_bumps) * 100
-                else:
-                    cr = 0.0
-                    
-                if cr >= target_cr_min:
-                    base_row = {
-                        'bump_len': bump_len,
-                        'slide_len': slide_len,
-                        'bump_threshold': float(bt),
-                        'min_bump_vol': int(bv),
-                        'bump_up_pct': float(bu),
-                        'slide_threshold': float(st),
-                        'min_slide_vol': int(sv),
-                        'slide_up_pct': float(su),
-                        'total_bumps': int(total_bumps),
-                        'hits': int(hits),
-                        'conversion_rate': cr
-                    }
-                    
+                # Store
+                base_row = {
+                    'bump_len': bump_len,
+                    'slide_len': slide_len,
+                    'bump_threshold': float(bt),
+                    'min_bump_vol': int(bv),
+                    'bump_up_pct': float(bu),
+                    'slide_threshold': float(st),
+                    'min_slide_vol': int(sv),
+                    'slide_up_pct': float(su),
+                    'total_bumps': int(total_bumps),
+                    'total_hits': int(hits),
+                    'true_hits': int(true_hits),
+                    'hits': int(hits), # Alias for Total Hits
+                }
+                
+                # Return result if we have hits (or if we want to show 0 hits? usually 0 hits is boring)
+                if hits > 0 or total_bumps > 0:
+                    local_res.append(base_row)
+
                     if detailed and hits > 0:
-                        # Extract Detailed Rows
+                        # Extract Detailed Rows using RAW hits (Total Hits)
+                        hits_indices = raw_hit_indices
+                        
                         dates_start = self.catalog.dates[hits_indices]
                         dates_bump_end = self.catalog.dates[hits_indices + bump_len - 1]
                         dates_slide_start = self.catalog.dates[hits_indices + bump_len]

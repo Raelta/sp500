@@ -1,6 +1,39 @@
 import pandas as pd
 import numpy as np
 
+def _calculate_true_hits(hits_df, bump_len, slide_len, total_rows):
+    """
+    Calculates True Hits (non-overlapping best matches) using greedy suppression.
+    """
+    if hits_df.empty:
+        return 0
+    
+    # Get indices (assumed to be integer positions from RangeIndex)
+    indices = hits_df.index.values
+    # Use absolute slide change as score
+    scores = hits_df['slide_change'].abs().values
+    
+    # Sort by score descending
+    sorted_order = np.argsort(scores)[::-1]
+    sorted_indices = indices[sorted_order]
+    
+    # Safety buffer for occupied array
+    occupied = np.zeros(total_rows + bump_len + slide_len, dtype=bool)
+    window_len = bump_len + slide_len
+    
+    count = 0
+    for idx in sorted_indices:
+        # Check bounds (though indices should be valid)
+        if idx >= total_rows: continue
+        
+        # Check overlap
+        end_idx = min(idx + window_len, total_rows)
+        if not occupied[idx:end_idx].any():
+            occupied[idx:end_idx] = True
+            count += 1
+            
+    return count
+
 def calculate_change(start_vals, end_vals, mode):
     if mode == 'percent':
         # Avoid division by zero
@@ -125,17 +158,22 @@ def find_bumps_and_slides(
                  (candidates['slide_up_pct'] >= slide_up_pct)
     
     total_bumps = bump_mask.sum()
-    hits = (bump_mask & slide_mask).sum()
+    total_hits = (bump_mask & slide_mask).sum()
     misses = (bump_mask & ~slide_mask).sum()
     
+    results = candidates[bump_mask & slide_mask].copy()
+    
+    # Calculate True Hits (Non-overlapping)
+    true_hits = _calculate_true_hits(results, bump_len, slide_len, len(df))
+
     stats = {
         'total_bumps': int(total_bumps),
-        'hits': int(hits),
+        'total_hits': int(total_hits),
+        'hits': int(total_hits), # Alias for backward compatibility (Total Hits)
+        'true_hits': int(true_hits),
         'misses': int(misses),
-        'hit_ratio': float((hits / total_bumps * 100) if total_bumps > 0 else 0)
+        'hit_ratio': float((total_hits / total_bumps * 100) if total_bumps > 0 else 0) # Based on Total Hits
     }
-
-    results = candidates[bump_mask & slide_mask].copy()
 
     if progress_callback: progress_callback("Finalizing results...", 100)
     
