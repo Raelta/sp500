@@ -122,6 +122,10 @@ def find_bumps_and_slides(
         'slide_end_date': df['date'].shift(-(bump_len + slide_len - 1))
     })
     
+    # Identify Data Gaps (Time difference > 1 minute between Bump End and Slide Start)
+    # This captures missing data or day boundaries.
+    candidates['data_gap'] = (candidates['slide_start_date'] - candidates['bump_end_date']) > pd.Timedelta(minutes=1)
+    
     # 3.5 Apply Time and Day Filters (Moved before threshold filtering to calculate stats on valid scope)
     if progress_callback: progress_callback("Applying time and day filters...", 60)
     

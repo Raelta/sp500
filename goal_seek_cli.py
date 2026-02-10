@@ -2,6 +2,7 @@ import argparse
 import pandas as pd
 import sys
 import time
+import os
 from src.data_loader import load_data_uncached
 from src.search_engine import GoalSeeker
 from src.catalog import WindowCatalog
@@ -37,6 +38,13 @@ Available Parameter Ranges:
   Other Ranges:
     bump-vol, slide-vol       (Default: Locked at 0)
     bump-up, slide-up         (Default: Locked at 0)
+
+Output Columns:
+  - total_hits:    Count of ALL overlapping pattern matches found.
+  - true_hits:     Count of distinct patterns (best match per overlapping sequence).
+  - best_hit_date: Date/Time of the single best match (highest slide change).
+  - total_bumps:   Count of candidate bumps meeting criteria.
+  - data_gap:      (Detailed only) True if gap > 1min exists between bump and slide.
 """
     parser = argparse.ArgumentParser(
         description=description,
@@ -110,7 +118,10 @@ def generate_grid(args):
         
         if step <= 0:
             # Assume locked at start
-            vals = [start]
+            if dtype == int:
+                vals = [int(start)]
+            else:
+                vals = [start]
         else:
             # Inclusive end
             if dtype == int:
@@ -130,6 +141,12 @@ def generate_grid(args):
 def main():
     args = parse_args()
     
+    # Auto-detect catalog
+    if not args.use_catalog and not args.build_catalog:
+        if os.path.exists("catalog/metadata.npz") and os.path.exists("catalog/change_matrix.npy"):
+            print("INFO: Pre-computed catalog found. Automatically enabling --use-catalog optimization.")
+            args.use_catalog = True
+
     print(f"--- Goal Seek CLI ---")
     print(f"Data: {args.data}")
     print(f"Min Bumps: >={args.min_bumps}")
@@ -269,7 +286,7 @@ def main():
     top_n = results_sorted.head(args.top_n)
     
     # Select key columns for display
-    cols = ['total_hits', 'true_hits', 'total_bumps', 
+    cols = ['total_hits', 'true_hits', 'best_hit_date', 'total_bumps', 
             'bump_len', 'slide_len', 
             'bump_threshold', 'slide_threshold', 
             'min_bump_vol', 'min_slide_vol']
@@ -277,6 +294,8 @@ def main():
     if args.detailed:
         if 'bump_start_date' in top_n.columns:
             cols.insert(0, 'bump_start_date')
+        if 'data_gap' in top_n.columns:
+            cols.append('data_gap')
             
     # Format for printing
     # Ensure cols exist

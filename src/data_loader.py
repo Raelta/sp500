@@ -2,7 +2,7 @@ import pandas as pd
 import streamlit as st
 from src.data_validator import validate_dataset
 
-def load_data_uncached(filepath="spy_data.parquet"):
+def load_data_uncached(filepath="spy_data_25yr.parquet"):
     """
     Loads the parquet data without caching.
     """
@@ -13,7 +13,7 @@ def load_data_uncached(filepath="spy_data.parquet"):
     return df
 
 @st.cache_data
-def load_data_cached(filepath="spy_data.parquet"):
+def load_data_cached(filepath="spy_data_25yr.parquet"):
     """
     Loads the parquet data with Streamlit caching and pre-calculates validation.
     Returns (df, val_report)

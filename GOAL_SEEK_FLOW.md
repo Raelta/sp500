@@ -5,7 +5,7 @@ This document outlines the architectural flow of the Goal Seek / Reverse Search 
 ```mermaid
 graph TD
     %% CLI Layer
-    Start([User Command]) -->|Args: Target CR, Ranges, Min Bumps| CLI[goal_seek_cli.py]
+    Start([User Command]) -->|Args: Ranges, Min Bumps| CLI[goal_seek_cli.py]
     CLI -->|Load Parquet| DataLoader[Data Loader]
     DataLoader -->|Clean & Validate| CLI
     CLI -->|Generate Grid| Seeker[GoalSeeker Engine]
@@ -28,20 +28,19 @@ graph TD
             MatrixBuild -->|"Bump Matrix (N x B)"| DotProd[Matrix Multiplication]
             MatrixBuild -->|"Slide Matrix (N x S)"| DotProd
             
-            DotProd -->|"Bump.T @ Slide"| Hits[Calculate Hits & Total Bumps]
-            Hits -->|Compute %| CR[Conversion Rate]
+            DotProd -->|"Bump.T @ Slide"| Hits[Calculate Total Hits & Bumps]
+            Hits -->|Filter| ValidMask{Hits > 0?}
             
-            CR -->|Filter| ValidMask{Valid?}
-            ValidMask -->|"CR >= Target"| OverlapFilter[Overlap Filtering (NMS)]
-            OverlapFilter -->|Keep Best Slide| CleanHits[Recalculate CR]
-            CleanHits -->|"CR >= Target"| Result[Store Result]
+            ValidMask -->|Yes| OverlapFilter[Identify True Hits (NMS)]
+            OverlapFilter -->|Keep Best Slide| CleanHits[Calculate True Hits]
+            CleanHits -->|Store| Result[Store Result]
             ValidMask -->|Else| Discard[Discard]
         end
     end
 
     %% Output Layer
     Result -->|Collect| Aggregator[Result Aggregation]
-    Aggregator -->|Sort by CR| Sorting
+    Aggregator -->|Sort by Total Hits| Sorting
     Sorting -->|Top N| Console[Console Output]
     Sorting -->|All Results| CSV[CSV File]
 ```

@@ -174,6 +174,12 @@ def _process_structure(df_search, s_dict, filter_keys, filter_values, target_cr_
             
             filtered_hit_indices = sorted(kept_indices) # Restore time order
             true_hits = len(filtered_hit_indices)
+            
+            # Identify Best Hit Date
+            best_idx_in_scores = np.argmax(scores)
+            best_hit_idx = raw_hit_indices[best_idx_in_scores]
+            # More readable format: YYYY-MM-DD HH:MM
+            best_hit_date = df_search['date'].iloc[best_hit_idx].strftime('%Y-%m-%d %H:%M')
 
         total_b = int(total_bumps_vec[b])
         
@@ -190,15 +196,17 @@ def _process_structure(df_search, s_dict, filter_keys, filter_values, target_cr_
         res['total_hits'] = raw_hits
         res['true_hits'] = true_hits
         res['hits'] = raw_hits # Alias for backwards compatibility, using Total Hits
+        if raw_hits > 0:
+            res['best_hit_date'] = best_hit_date
         
         if detailed:
             if raw_hits > 0:
                 # For detailed results, we return ALL overlapping hits (raw_hits)
                 # as the user wants to see "Total Hits"
                 hit_indices = raw_hit_indices
-                # Or do they want to see True Hits only? 
-                # "total hits: this all the bump/slide matches"
-                # So we should show all.
+                
+                # Helper set for fast lookup
+                true_hit_set = set(filtered_hit_indices)
                 
                 # Extract Data Series (aligned)
                 # Use .values to avoid index issues if df_search has non-standard index
@@ -206,6 +214,13 @@ def _process_structure(df_search, s_dict, filter_keys, filter_values, target_cr_
                 d_bend = df_search['date'].shift(-(bump_len - 1)).iloc[hit_indices].values
                 d_sstart = df_search['date'].shift(-bump_len).iloc[hit_indices].values
                 d_send = df_search['date'].shift(-(bump_len + slide_len - 1)).iloc[hit_indices].values
+                
+                # Calculate Data Gap
+                # d_sstart and d_bend are numpy arrays of datetime64[ns]
+                # We define gap as > 1 minute
+                one_min = np.timedelta64(1, 'm')
+                gaps = d_sstart - d_bend
+                is_gap = gaps > one_min
                 
                 b_change_vals = bump_change.iloc[hit_indices].values
                 s_change_vals = slide_change.iloc[hit_indices].values
@@ -226,7 +241,9 @@ def _process_structure(df_search, s_dict, filter_keys, filter_values, target_cr_
                         'bump_vol': float(b_vol_vals[k]),
                         'slide_vol': float(s_vol_vals[k]),
                         'bump_up_pct_actual': float(b_up_vals[k]),
-                        'slide_up_pct_actual': float(s_up_vals[k])
+                        'slide_up_pct_actual': float(s_up_vals[k]),
+                        'is_true_hit': hit_indices[k] in true_hit_set,
+                        'data_gap': bool(is_gap[k])
                     })
                     local_results.append(row_det)
         else:
@@ -347,8 +364,8 @@ class GoalSeeker:
                     if val is not None:
                         parts.append(f"--{cli_arg} {val}")
                 
-                # Ensure target CR allows this result to show (set to 0)
-                parts.append("--target-cr 0")
+                # Ensure target CR allows this result to show (set to 0) - DEPRECATED/REMOVED
+                # parts.append("--target-cr 0")
                 
                 res['cli_command'] = " ".join(parts)
 

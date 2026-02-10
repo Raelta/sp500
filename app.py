@@ -33,7 +33,7 @@ cli_args = get_cli_args()
 # Load Data
 with st.spinner("Loading data..."):
     t_load_start = time_module.time()
-    df, val_report = load_data_cached("spy_data.parquet")
+    df, val_report = load_data_cached("spy_data_25yr.parquet")
     t0 = log_perf("Data Load (Cached)", t_load_start)
 
 st.success(f"Loaded {len(df)} rows.")

@@ -42,6 +42,7 @@ def render_results(results, stats, config, df_filtered, val_report=None):
             # Reorder columns for clarity
             desired_order = [
                 'bump_start_date', 'bump_end_date', 'slide_start_date', 'slide_end_date',
+                'data_gap',
                 'bump_change', 'slide_change', 
                 'bump_vol', 'slide_vol',
                 'bump_up_pct', 'slide_up_pct',
@@ -88,6 +89,7 @@ def render_results(results, stats, config, df_filtered, val_report=None):
                     "slide_change": st.column_config.NumberColumn("Slide Change %", format="%.2f"),
                     "bump_vol": st.column_config.NumberColumn("Bump Size Vol"),
                     "slide_vol": st.column_config.NumberColumn("Slide Size Vol"),
+                    "data_gap": st.column_config.CheckboxColumn("Gap?"),
                     "is_multiday": None, # Hide helper column
                 },
                 hide_index=True 

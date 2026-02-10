@@ -90,11 +90,10 @@ streamlit run app.py -- --bump-len 10 --bump-thresh 0.1
 You can also run the Goal Seek analysis directly from the terminal without the web interface.
 
 ```bash
-python goal_seek_cli.py --target-cr 60 --top-n 10
+python goal_seek_cli.py --min-bumps 10 --top-n 10
 ```
 
 **Common Arguments:**
-- `--target-cr`: Minimum Conversion Rate (default 50.0)
 - `--min-bumps`: Minimum Total Bumps required (default 0)
 - `--top-n`: Number of top results to display (default 20)
 - `--output`: Output CSV filename (default `goal_seek_results.csv`)
@@ -119,9 +118,9 @@ For exhaustive searches (e.g., checking thousands of window size combinations), 
    *   `--catalog-max-len` sets the maximum window size in minutes (default 360).
 
 2. **Run Fast Search**:
-   Add the `--use-catalog` flag to your command.
+   The CLI automatically detects and uses the catalog if it exists.
    ```bash
-   python goal_seek_cli.py --use-catalog --target-cr 60 --bump-len-start 15 --bump-len-end 60
+   python goal_seek_cli.py --bump-len-start 15 --bump-len-end 60
    ```
    *   Uses the pre-computed data for instant lookups.
    *   Supports multi-threaded execution automatically.

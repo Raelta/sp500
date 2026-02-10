@@ -5,6 +5,9 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Metric Upgrade**: Introduced "True Hits" (best unique matches) and "Total Hits" (all overlapping matches) metrics.
+- **Data Gap Detection**: New `data_gap` column identifies matches with time discontinuities (e.g., missing minutes, day boundaries).
+- **Goal Seek CLI**: Updated output to sort by Total Hits and include `best_hit_date` and hit counts.
 - **Window Catalog**: Implemented a "Hybrid Catalog" system for ultra-fast Goal Seek performance.
   - **Pre-parsed Data**: Stores pre-computed Price Change matrices (Memory-Mapped) and Cumulative Volume/Up-Count arrays.
   - **Parallel Search**: Added `CatalogSearcher` which uses multi-threaded vector operations to search millions of combinations in seconds.
@@ -12,7 +15,8 @@ All notable changes to this project will be documented in this file.
 - **Goal Seek**: Added `--min-bumps` argument to filter results by a minimum number of pattern occurrences.
 
 ### Changed
-- **Goal Seek Filtering**: Implemented **Non-Maximum Suppression (NMS)** in both Standard and Catalog search engines. This filters out overlapping pattern matches, preserving only the instance with the highest slide magnitude to ensure accurate conversion rates.
+- **Conversion Rate Eliminated**: Removed conversion rate filtering and metrics to provide a more complete view of pattern occurrences. The `--target-cr` argument is deprecated/removed.
+- **Goal Seek Filtering**: Implemented **Non-Maximum Suppression (NMS)** logic to differentiate between "Total Hits" (raw overlaps) and "True Hits" (filtered bests).
 - **CLI Arguments**: Simplified threshold parameters. Replaced range-based arguments (`--bump-thresh-start/end/step`) with single minimum threshold arguments (`--min-bump-threshold`, `--min-slide-threshold`). The search now treats these as fixed minimum requirements rather than optimization variables.
 
 ## [0.2.0] - 2026-01-20

@@ -8,3 +8,4 @@ __pycache__/
 .hypothesis/
 catalog/metadata.npz
 catalog/change_matrix.npy
+.DS_Store

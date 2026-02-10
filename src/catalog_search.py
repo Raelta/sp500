@@ -45,6 +45,8 @@ class CatalogSearcher:
         
         # Helper for vectorized search
         def process_structure(bump_len, slide_len):
+            bump_len = int(bump_len)
+            slide_len = int(slide_len)
             local_res = []
             
             # 1. Get Base Arrays (Vectorized from Catalog)
@@ -175,6 +177,15 @@ class CatalogSearcher:
                             occupied[idx:end_idx] = True
                             
                     true_hits = len(kept_indices)
+                    
+                    # Identify Best Hit Date
+                    best_idx_in_scores = np.argmax(scores)
+                    best_hit_idx = raw_hit_indices[best_idx_in_scores]
+                    # Convert to readable format
+                    best_hit_date = pd.Timestamp(self.catalog.dates[best_hit_idx]).strftime('%Y-%m-%d %H:%M')
+                    
+                    # Prepare set for detailed is_true_hit check
+                    true_hit_set = set(kept_indices)
 
                 # We ignore target_cr_min check as requested
                 
@@ -196,8 +207,9 @@ class CatalogSearcher:
                 
                 # Return result if we have hits (or if we want to show 0 hits? usually 0 hits is boring)
                 if hits > 0 or total_bumps > 0:
-                    local_res.append(base_row)
-
+                    if hits > 0:
+                        base_row['best_hit_date'] = best_hit_date
+                        
                     if detailed and hits > 0:
                         # Extract Detailed Rows using RAW hits (Total Hits)
                         hits_indices = raw_hit_indices
@@ -206,6 +218,12 @@ class CatalogSearcher:
                         dates_bump_end = self.catalog.dates[hits_indices + bump_len - 1]
                         dates_slide_start = self.catalog.dates[hits_indices + bump_len]
                         dates_slide_end = self.catalog.dates[hits_indices + bump_len + slide_len - 1]
+                        
+                        # Calculate Data Gap
+                        # dates are datetime64[ns]
+                        one_min = np.timedelta64(1, 'm')
+                        gaps = dates_slide_start - dates_bump_end
+                        is_gap = gaps > one_min
                         
                         # Extract Values
                         val_b_change = b_change[hits_indices]
@@ -227,10 +245,13 @@ class CatalogSearcher:
                                 'bump_vol': float(val_b_vol[k]),
                                 'slide_vol': float(val_s_vol[k]),
                                 'bump_up_pct_actual': float(val_b_up[k]),
-                                'slide_up_pct_actual': float(val_s_up[k])
+                                'slide_up_pct_actual': float(val_s_up[k]),
+                                'is_true_hit': hits_indices[k] in true_hit_set,
+                                'data_gap': bool(is_gap[k])
                             })
                             local_res.append(row)
-                    elif not detailed:
+                    else:
+                        # Non-detailed mode, or detailed mode with 0 hits: return summary row
                         local_res.append(base_row)
                         
             return local_res
@@ -297,7 +318,7 @@ class CatalogSearcher:
                 if val is not None:
                     parts.append(f"--{cli_arg} {val}")
             
-            parts.append("--target-cr 0")
+            # parts.append("--target-cr 0") - DEPRECATED
             commands.append(" ".join(parts))
             
         df_results['cli_command'] = commands
