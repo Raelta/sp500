@@ -17,7 +17,7 @@ def test_app_analysis_flow():
     # Check duplicate cleaning info
     # The app runs validation and cleaning on load.
     # So we should see the info message "Auto-cleaned data" if duplicates existed.
-    # Since we know spy_data.parquet has duplicates, this should be present.
+    # Since we know spy_data_25yr.parquet has duplicates, this should be present.
     # But if data was clean, it wouldn't be. 
     # We can check validation report expander existence instead.
     assert len(at.expander) > 0

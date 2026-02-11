@@ -9,7 +9,7 @@ def test_data_equivalence():
     """
     Verifies that the App Logic and CLI Logic result in the exact same dataframe.
     """
-    DATA_FILE = "spy_data.parquet"
+    DATA_FILE = "spy_data_25yr.parquet"
     if not os.path.exists(DATA_FILE):
         pytest.skip(f"{DATA_FILE} not found")
     
@@ -36,7 +36,7 @@ def test_cli_execution_sanity():
     Runs the CLI script via subprocess to ensure it produces a CSV.
     Uses params known to produce results (Bump Len 5, Thresh 0.1).
     """
-    DATA_FILE = "spy_data.parquet"
+    DATA_FILE = "spy_data_25yr.parquet"
     if not os.path.exists(DATA_FILE):
         pytest.skip(f"{DATA_FILE} not found")
 

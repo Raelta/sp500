@@ -7,3 +7,4 @@ hypothesis
 tqdm
 google-cloud-run
 google-cloud-storage
+playwright
