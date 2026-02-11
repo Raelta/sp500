@@ -23,7 +23,7 @@ if 'results' not in st.session_state:
 if 'stats' not in st.session_state:
     st.session_state.stats = None
 if 'app_mode' not in st.session_state:
-    st.session_state.app_mode = "Exploration"
+    st.session_state.app_mode = "Goal Seek"
 
 t0 = time_module.time()
 print(f"--- RERUN STARTED at {t0} ---")
@@ -84,8 +84,13 @@ if val_report['duplicates']['count'] > 0:
 
 # --- Navigation ---
 st.sidebar.title("Navigation")
-mode = st.sidebar.radio("Select Mode", ["Exploration", "Goal Seek"], index=0 if st.session_state.app_mode == "Exploration" else 1)
-st.session_state.app_mode = mode
+# Bind radio directly to session state key. 
+# st.session_state.app_mode is initialized to "Goal Seek" above.
+st.sidebar.radio(
+    "Select Mode", 
+    ["Exploration", "Goal Seek"], 
+    key="app_mode"
+)
 
 st.sidebar.divider()
 

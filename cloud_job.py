@@ -13,6 +13,11 @@ def run_job():
         print("Error: GOAL_SEEK_CONFIG environment variable not set.")
         return
 
+    # Strip gcloud escape prefix if present (e.g. ^~^ or ^:^)
+    # Prefix format is ^DELIMITER^
+    if config_str.startswith("^") and len(config_str) > 3 and config_str[2] == "^":
+        config_str = config_str[3:]
+
     config = json.loads(config_str)
     
     # Params
@@ -56,13 +61,13 @@ def run_job():
     
     print(f"Search complete. Found {len(results)} results.")
     
-    if not results.empty:
-        results.to_csv(output_path, index=False)
-        print(f"Results saved to {output_path}")
-        
-        # If running in GCP, we might want to upload this to GCS
-        gcs_output = config.get("gcs_output_path")
-        if gcs_output:
+    # Always save a file to avoid 404s on the client side
+    results.to_csv(output_path, index=False)
+    print(f"Results saved to {output_path}")
+    
+    # If running in GCP, we might want to upload this to GCS
+    gcs_output = config.get("gcs_output_path")
+    if gcs_output:
             try:
                 from google.cloud import storage
                 client = storage.Client()

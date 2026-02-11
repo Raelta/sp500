@@ -7,34 +7,20 @@ A Python application designed to analyze intraday SPY (S&P 500 ETF) data for "Bu
 - **Pattern Detection**: 
   - Automatically identifies "Bump" (initial trend) and "Slide" (subsequent reaction) patterns.
   - Detects patterns based on configurable lengths (minutes), thresholds (price/%), and volume.
-- **Goal Seek / Reverse Search**:
-  - Define a target Conversion Rate and find parameter combinations that achieve it.
-  - "Lock" specific parameters while varying others across a range.
-  - **High Performance**:
-    - **Parallel Processing**: Utilizes all available CPU cores to execute the search concurrently.
-    - **Vectorized Broadcasting**: Uses NumPy matrix multiplication to check thousands of parameter combinations simultaneously, eliminating slow loops.
-    - **Smart Pruning**: Automatically discards impossible parameter combinations based on data limits.
-  - **Window Catalog (Optimized Search)**:
-    - Pre-compute window metrics to disk for instant lookups.
-    - **Hybrid Storage**: Uses a memory-mapped matrix for Price Change (2GB) and cumulative sums for Volume/Up Ratio (50MB) to balance speed and storage.
-    - **Parallel Search**: Uses `ThreadPoolExecutor` to perform vectorized searches across multiple CPU cores, achieving >900 parameter combinations per second.
+- **Goal Seek (UI Integrated)**:
+  - **Exhaustive Search**: Define parameter ranges directly in the Web UI and find the most successful combinations.
+  - **Local & Cloud Execution**: Run searches on your local machine or offload them to Google Cloud for high performance.
+  - **One-Click Visualization**: Click any result in the Goal Seek table to instantly load it into the Exploration view.
+- **High Performance Search Engine**:
+  - **Parallel Processing**: Utilizes all available CPU cores to execute searches concurrently.
+  - **Vectorized Broadcasting**: Uses NumPy matrix multiplication to check thousands of combinations simultaneously.
+  - **Window Catalog**: Pre-compute metrics to disk for near-instant lookups (Catalog mode).
 - **Interactive Dashboard**: 
   - Powerful Streamlit app with reactive analysis.
   - Interactive Plotly visualizations with zoom, pan, and hover details.
-- **Advanced Visualization**:
-  - **Wickless Candles**: Cleaner price charts that emphasize Open/Close bodies.
-  - **Volume Subplot**: Dedicated volume chart synchronized with price action.
-  - **Pattern Highlighting**: Visual rectangles indicating exactly where Bump and Slide windows occur.
 - **Smart Filtering**: 
   - Excel-style "Select All" filters for Years and Days of the Week.
   - Filter by Volume, Time of Day, and Days.
-- **Statistics**:
-  - Real-time "Hit Rate" calculation showing how many bumps convert to valid slides.
-- **Interactive UI**:
-  - **Table-Driven Navigation**: Click any row in the matches table to instantly view the chart.
-  - **Configurable Layout**: Toggle between Table-Top or Chart-Top views.
-  - **News Integration**: Contextual Google News search links for every match.
-- **Data Quality**: Advanced validation checks for duplicates, gaps, and missing minutes (with downloadable reports).
 
 ## Installation
 
@@ -45,7 +31,6 @@ A Python application designed to analyze intraday SPY (S&P 500 ETF) data for "Bu
    ```
 
 2. **Install dependencies:**
-   It is recommended to use a virtual environment.
    ```bash
    pip install -r requirements.txt
    ```
@@ -54,130 +39,87 @@ A Python application designed to analyze intraday SPY (S&P 500 ETF) data for "Bu
 
 ### Web Dashboard
 
-The dashboard offers the best experience for exploring data and visualizing patterns.
+The primary way to use the application. Supports both manual exploration and automated Goal Seeking.
 
 ```bash
 streamlit run app.py
 ```
 
-*   **Filters**: Use the sidebar to set Year/Day filters and Adjust parameters.
-*   **Analysis**: The app updates reactively.
-*   **Selection**: Click any row in the **Matches Table** to view the visualization. Click column headers to sort.
-*   **Layout**: Use the "App Layout" toggle to customize your workspace.
+*   **Exploration Mode**: Manually adjust parameters and visualize patterns on a chart.
+*   **Goal Seek Mode**: Enter ranges for parameters and find the best performing configurations.
 
-#### Command Line Overrides
+---
 
-You can launch the app with custom parameter defaults using command-line arguments. Append your flags after a `--` separator.
+## Cloud Offloading (Google Cloud Platform)
 
-**Example:**
-```bash
-# Set Bump Length to 10 minutes and Threshold to 0.1%
-streamlit run app.py -- --bump-len 10 --bump-thresh 0.1
-```
+For massive searches that require significant compute power, you can offload the workload to **Google Cloud Run Jobs**.
 
-**Supported Flags:**
-- `-bl`, `--bump-len`: Bump Length (min)
-- `-bt`, `--bump-thresh`: Bump Threshold
-- `--bump-type`: 'percent' or 'value'
-- `-sl`, `--slide-len`: Slide Length (min)
-- `-st`, `--slide-thresh`: Slide Threshold
-- `--slide-type`: 'percent' or 'value'
-- `--min-bump-vol`: Min Bump Size Vol
-- `--min-slide-vol`: Min Slide Size Vol
+### 1. Initial Setup (One-Time)
 
-### Goal Seek CLI
-
-You can also run the Goal Seek analysis directly from the terminal without the web interface.
+You will need the `gcloud` CLI installed and authenticated to your project.
 
 ```bash
-python goal_seek_cli.py --min-bumps 10 --top-n 10
+# Set your project ID
+gcloud config set project sp500-479009
+
+# Enable required APIs
+gcloud services enable cloudbuild.googleapis.com artifactregistry.googleapis.com run.googleapis.com
 ```
 
-**Common Arguments:**
-- `--min-bumps`: Minimum Total Bumps required (default 0)
-- `--top-n`: Number of top results to display (default 20)
-- `--output`: Output CSV filename (default `goal_seek_results.csv`)
-- **Ranges**: Define ranges for parameters using `--[name]-start`, `--[name]-end`, `--[name]-step`.
-  - Example: `--bump-len-start 3 --bump-len-end 5 --bump-len-step 1`
+### 2. Permissions (Troubleshooting Log)
 
-#### Default Ranges (if unspecified)
-If you run the CLI without specific parameter arguments, it defaults to:
-*   **Bump/Slide Length**: 3 to 6 (Step 1)
-*   **Bump/Slide Threshold**: 3.0 to 10.0 (Step 0.5)
-*   **Size Vol**: Locked at 0
-*   **Up %**: Locked at 0
+If you encounter `403 Forbidden` errors during build or execution, ensure the **Compute Engine default service account** (used by Cloud Build) has the following roles (Note: The build uses Python 3.11-slim as defined in the `Dockerfile`):
 
-#### Optimized Catalog Search
-For exhaustive searches (e.g., checking thousands of window size combinations), you should use the pre-computed Window Catalog.
+```bash
+# Replace [PROJECT_NUMBER] with your project's number (e.g. 190958000714)
+SA_EMAIL="[PROJECT_NUMBER]-compute@developer.gserviceaccount.com"
 
-1. **Build the Catalog** (Run once):
-   ```bash
-   python goal_seek_cli.py --build-catalog --catalog-max-len 360
-   ```
-   *   Generates `catalog/change_matrix.npy` (~2GB) and `catalog/metadata.npz` (~50MB).
-   *   `--catalog-max-len` sets the maximum window size in minutes (default 360).
+# Grant permissions
+gcloud projects add-iam-policy-binding sp500-479009 --member=serviceAccount:$SA_EMAIL --role=roles/storage.admin
+gcloud projects add-iam-policy-binding sp500-479009 --member=serviceAccount:$SA_EMAIL --role=roles/artifactregistry.admin
+gcloud projects add-iam-policy-binding sp500-479009 --member=serviceAccount:$SA_EMAIL --role=roles/logging.logWriter
+```
 
-2. **Run Fast Search**:
-   The CLI automatically detects and uses the catalog if it exists.
-   ```bash
-   python goal_seek_cli.py --bump-len-start 15 --bump-len-end 60
-   ```
-   *   Uses the pre-computed data for instant lookups.
-   *   Supports multi-threaded execution automatically.
+### 3. Build & Deploy Workflow
 
-#### Understanding Progress Logs
-During execution, you will see logs like:
-`[33.3%] Analyzing structure 8/24...`
+The app uses **Google Cloud Build** so you don't need Docker installed locally.
 
-*   **Structure**: Refers to a unique combination of **Bump Length** and **Slide Length**. These are the "heavy" parameters that require re-scanning the dataset.
-*   **Optimization**: Inside each "Structure", the engine tests hundreds of Threshold/Volume combinations almost instantly using vectorized operations and Data-Driven Pruning.
+1.  **Build the Image**:
+    ```bash
+    gcloud builds submit --tag gcr.io/sp500-479009/sp500-analyzer .
+    ```
+2.  **Create the Job**:
+    ```bash
+    gcloud beta run jobs create sp500-goal-seek \
+        --image gcr.io/sp500-479009/sp500-analyzer \
+        --tasks 1 --region europe-west2 --cpu 4 --memory 8Gi
+    ```
+3.  **Setup Local Auth (for UI buttons)**:
+    ```bash
+    gcloud auth application-default login
+    ```
+
+4.  **Execute**:
+    Trigger the job from the **Goal Seek UI** in the Streamlit app, or via:
+    ```bash
+    gcloud beta run jobs execute sp500-goal-seek --region europe-west2
+    ```
+
+---
 
 ## Project Structure
 
-```
-.
-├── app.py                  # Main Streamlit application entry point
-├── debug_app.py            # Visual verification tool using synthetic data
-├── CHANGELOG.md            # History of changes and versions
-├── README.md               # Documentation
-├── requirements.txt        # Python dependencies
-├── spy_data.parquet        # Default dataset (SPY Intraday Data)
-├── TEST_STRATEGY.md        # Detailed QA strategy document
-└── src/
-    ├── analyzer.py         # Core logic for pattern detection and stats
-    ├── config.py           # CLI argument parsing and configuration
-    ├── data_loader.py      # Data loading (cached & uncached)
-    ├── data_validator.py   # Data quality checks (gaps, missing minutes)
-    ├── news_provider.py    # Google News search integration
-    ├── search_engine.py    # Optimized search logic for Goal Seek
-    ├── visualizer.py       # Plotly visualization logic (Charts)
-    ├── test_utils/         # Test utilities
-    │   └── data_generator.py # Synthetic data generation logic
-    └── ui/                 # UI Component Package
-        ├── __init__.py
-        ├── results.py      # Logic for displaying tables, charts, and stats
-        ├── sidebar.py      # Logic for rendering the configuration sidebar
-        └── utils.py        # Shared UI utilities and helpers
-```
+- `app.py`: Main Streamlit entry point.
+- `src/ui/exploration.py`: Logic for the interactive chart view.
+- `src/ui/goal_seek.py`: Logic for the automated search UI.
+- `src/cloud_runner.py`: Tooling for GCP job generation and execution.
+- `cloud_job.py`: Dedicated worker script for cloud execution.
+- `src/search_engine.py`: Core parallelized search logic.
+- `src/analyzer.py`: Pattern detection algorithms.
 
-## Quality Assurance & Testing
+## Quality Assurance
 
-We employ a robust testing strategy using Synthetic Data to verify logic independent of data quality.
-
-### Running Tests
-To run Unit and Property-based tests:
+To run unit and property-based tests:
 ```bash
 python -m pytest
 ```
-
-### Visual Debug Mode
-To verify the analyzer logic against controlled synthetic data:
-```bash
-streamlit run debug_app.py
-```
-This mode allows you to:
-- Generate random market noise.
-- Inject specific "Perfect Patterns" at known indices.
-- Verify if the analyzer detects them correctly.
-
-See [TEST_STRATEGY.md](TEST_STRATEGY.md) for full details.

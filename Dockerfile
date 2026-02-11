@@ -1,17 +1,21 @@
-FROM python:3.9-slim
+FROM python:3.11-slim
+
+# Prevent interactive prompts during build
+ENV DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app
 
-# Install system dependencies if any
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements and install
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --upgrade pip --root-user-action=ignore
+RUN pip install --no-cache-dir -r requirements.txt --root-user-action=ignore
 # Add GCP storage client for cloud_job
-RUN pip install --no-cache-dir google-cloud-storage
+RUN pip install --no-cache-dir google-cloud-storage --root-user-action=ignore
 
 # Copy source code
 COPY src/ ./src/
