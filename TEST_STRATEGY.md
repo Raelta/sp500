@@ -1,7 +1,7 @@
 # Test Strategy & Quality Assurance Plan
 
 ## 1. Problem Statement
-The primary challenge in this project is the **Unknown Data Quality** of the input source (`spy_data.parquet`). Reliance on this data makes it difficult to verify if analytical features (Bump & Slide detection) are functioning correctly or if they are failing due to data anomalies.
+The primary challenge in this project is the **Unknown Data Quality** of the input source (`spy_data_25yr.parquet`). Reliance on this data makes it difficult to verify if analytical features (Bump & Slide detection) are functioning correctly or if they are failing due to data anomalies.
 
 ## 2. Core Strategy: Synthetic Verification
 To ensure robustness, we will decouple **Logic Verification** from **Data Quality**. We will achieve this by creating a **Synthetic Data Generator** that produces "controlled" market data. This allows us to verify that *if* a pattern exists, the code *will* find it.
