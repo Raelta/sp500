@@ -53,7 +53,7 @@ Output Columns:
     )
     
     # Global Config
-    parser.add_argument("--data", default="spy_data.parquet", help="Path to data file")
+    parser.add_argument("--data", default="spy_data_25yr.parquet", help="Path to data file")
     parser.add_argument("--min-bumps", type=int, default=0, help="Minimum Total Bumps Required")
     parser.add_argument("--top-n", type=int, default=20, help="Number of top results to display")
     parser.add_argument("--output", default="goal_seek_results.csv", help="Output CSV filename")
