@@ -1,5 +1,7 @@
 import pandas as pd
 import streamlit as st
+import pickle
+import os
 from src.data_validator import validate_dataset
 
 def load_data_uncached(filepath="spy_data_25yr.parquet"):
@@ -19,6 +21,18 @@ def load_data_cached(filepath="spy_data_25yr.parquet"):
     Returns (df, val_report)
     """
     df = load_data_uncached(filepath)
+    
+    # Check for pre-computed report
+    report_path = "validation_report.pkl"
+    if os.path.exists(report_path):
+        try:
+            with open(report_path, "rb") as f:
+                val_report = pickle.load(f)
+            return df, val_report
+        except Exception as e:
+            print(f"Warning: Failed to load pre-computed report: {e}")
+
+    # Fallback to runtime calculation
     val_report = validate_dataset(df)
     
     # Calculate Yearly Median SizeVol

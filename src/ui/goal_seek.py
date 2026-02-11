@@ -83,6 +83,14 @@ def auto_monitor_job(runner, job_name, bucket):
         elif latest_exec['is_running']:
             st.caption("⏳ Job is running. Results will load automatically when finished.")
 
+        # Log Viewer for Debugging
+        with st.expander("View Cloud Logs", expanded=False):
+            st.info("Logs are fetched on-demand to save resources.")
+            if st.button("Refresh Logs"):
+                with st.spinner("Fetching logs..."):
+                    logs = runner.get_job_logs(job_name, latest_exec['id'])
+                    st.code(logs, language="text")
+
 def render_goal_seek(df, cli_args, val_report):
     # --- SIDEBAR INPUTS ---
     st.sidebar.title("Goal Seek Parameters")

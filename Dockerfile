@@ -21,7 +21,11 @@ RUN pip install --no-cache-dir google-cloud-storage --root-user-action=ignore
 COPY src/ ./src/
 COPY spy_data_25yr.parquet .
 COPY cloud_job.py .
+COPY precompute_validation.py .
 COPY catalog/ ./catalog/
+
+# Pre-compute validation report to speed up app startup
+RUN python precompute_validation.py
 
 # Entry point
 CMD ["python", "cloud_job.py"]

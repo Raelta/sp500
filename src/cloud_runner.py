@@ -5,6 +5,7 @@ import streamlit as st
 from datetime import time
 from google.cloud import run_v2
 from google.cloud import storage
+from google.cloud import logging as cloud_logging
 import google.auth
 from google.oauth2 import service_account
 
@@ -25,6 +26,7 @@ class CloudRunner:
         self._run_client = None
         self._exec_client = None
         self._storage_client = None
+        self._logging_client = None
         self._credentials = None
 
     def get_credentials(self):
@@ -82,6 +84,13 @@ class CloudRunner:
             creds = self.get_credentials()
             self._storage_client = storage.Client(credentials=creds, project=self.project_id)
         return self._storage_client
+
+    @property
+    def logging_client(self):
+        if self._logging_client is None:
+            creds = self.get_credentials()
+            self._logging_client = cloud_logging.Client(credentials=creds, project=self.project_id)
+        return self._logging_client
 
     def _get_secrets_debug_info(self):
         """
@@ -299,3 +308,47 @@ gcloud beta run jobs create {job_name} \\
 # 3. Setup Local Auth (for UI buttons to work locally)
 gcloud auth application-default login
 """
+
+    def get_job_logs(self, job_name, execution_id, max_entries=50):
+        """
+        Fetches recent logs for a specific job execution.
+        """
+        ok, msg = self.check_credentials()
+        if not ok:
+            return msg
+
+        try:
+            # Filter for Cloud Run Job logs specific to this execution ID
+            # Note: execution_id is the full resource name's last segment (e.g. "job-name-xyz")
+            filter_str = (
+                f'resource.type="cloud_run_job" AND '
+                f'labels."run.googleapis.com/execution_name"="{execution_id}"'
+            )
+            
+            entries = self.logging_client.list_entries(
+                filter_=filter_str,
+                order_by=cloud_logging.DESCENDING,
+                page_size=max_entries
+            )
+            
+            logs = []
+            for entry in entries:
+                timestamp = entry.timestamp.strftime("%H:%M:%S") if entry.timestamp else ""
+                payload = entry.payload
+                # Payload can be a string, or a dict (jsonPayload), or None
+                if isinstance(payload, dict):
+                    # Try to find a message field or dump the dict
+                    msg = payload.get('message', str(payload))
+                else:
+                    msg = str(payload)
+                
+                logs.append(f"[{timestamp}] {msg}")
+            
+            if not logs:
+                return "No logs found yet. (It may take a few seconds for logs to appear)"
+                
+            # Return reversed (oldest first) for readability
+            return "\n".join(reversed(logs))
+            
+        except Exception as e:
+            return self._handle_error(e, f"Logging for {execution_id}")
