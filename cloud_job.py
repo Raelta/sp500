@@ -31,6 +31,8 @@ def run_job():
     # --- SEARCH ENGINE SELECTION ---
     # Check if pre-built catalog exists
     catalog_dir = "catalog"
+    optimization_mode = "NONE"
+    
     if os.path.exists(os.path.join(catalog_dir, "metadata.npz")):
         print(f"✅ Pre-built catalog found in /{catalog_dir}. Using CatalogSearcher optimization.")
         # Debug: list files in catalog to verify upload
@@ -39,6 +41,7 @@ def run_job():
             print(f"📁 Catalog directory contents: {files}")
         except Exception: pass
         seeker = CatalogSearcher(catalog_dir=catalog_dir)
+        optimization_mode = "CATALOG"
     else:
         print(f"⚠️ Catalog not found. Loading raw data from {data_path} and using GoalSeeker.")
         df = load_data_uncached(data_path)
@@ -58,6 +61,10 @@ def run_job():
     )
     
     print(f"Search complete. Found {len(results)} results.")
+    
+    # Inject metadata into results for UI verification
+    if not results.empty:
+        results['optimization_mode'] = optimization_mode
     
     # Always save a file to avoid 404s on the client side
     results.to_csv(output_path, index=False)

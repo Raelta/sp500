@@ -184,11 +184,7 @@ def render_goal_seek(df, cli_args, val_report):
 
         with st.expander("🛠️ Advanced / Manual Run", expanded=False):
             if cat_status != 'ok':
-                st.warning(f"⚠️ **Catalog Issue:** {cat_msg}")
-                if cat_status == 'stale':
-                    st.info("💡 Run `python goal_seek_cli.py --build-catalog` to update your local catalog before deploying.")
-                else:
-                    st.info("💡 Run `python goal_seek_cli.py --build-catalog` to generate a catalog for faster cloud searches.")
+                st.info(f"ℹ️ **Local Catalog Status:** {cat_msg}\n\nThis affects local searches only. If you have deployed your cloud job correctly with a catalog, cloud searches will still be optimized.")
             
             st.code(runner.generate_gcloud_command(gcp_job_name, config_dict, wrap=True), language="bash")
             st.code(runner.get_deploy_instructions(gcp_job_name, "sp500-analyzer"), language="bash")
@@ -215,13 +211,27 @@ def render_goal_seek(df, cli_args, val_report):
         st.divider()
         st.write("### 📊 Search Results")
         
+        display_df = st.session_state.gs_results.copy()
+        
+        # Display Optimization Status
+        opt_mode = display_df.iloc[0].get('optimization_mode', 'UNKNOWN') if not display_df.empty else 'UNKNOWN'
+        
         if run_cloud:
             runner = CloudRunner(project_id=gcp_project, region=gcp_region)
             latest_exec, _ = runner.get_latest_execution(gcp_job_name)
-            if latest_exec and latest_exec.get('duration'):
-                st.info(f"⏱️ Cloud Calculation Time: **{latest_exec['duration']}**")
+            
+            status_cols = st.columns([1, 1])
+            with status_cols[0]:
+                if latest_exec and latest_exec.get('duration'):
+                    st.info(f"⏱️ Duration: **{latest_exec['duration']}**")
+            with status_cols[1]:
+                if opt_mode == 'CATALOG':
+                    st.success("⚡ **Optimized (Catalog)**")
+                elif opt_mode == 'NONE':
+                    st.warning("⚠️ **Unoptimized (Raw Data)**")
+                else:
+                    st.caption(f"Mode: {opt_mode}")
 
-        display_df = st.session_state.gs_results.copy()
         cols = ['total_hits', 'true_hits', 'total_bumps', 'bump_len', 'slide_len', 'bump_threshold', 'slide_threshold', 'min_bump_vol', 'min_slide_vol', 'best_hit_date']
         existing_cols = [c for c in cols if c in display_df.columns]
         
