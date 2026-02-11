@@ -105,6 +105,26 @@ The app uses **Google Cloud Build** so you don't need Docker installed locally.
     gcloud beta run jobs execute sp500-goal-seek --region europe-west2
     ```
 
+### 4. Monitoring & Logs
+
+You can verify if the cloud job is running correctly (and using the optimized Catalog) by checking the logs:
+
+-   **Web Console**: Go to [Cloud Run Jobs](https://console.cloud.google.com/run/jobs) -> `sp500-goal-seek` -> **Logs** tab.
+-   **CLI**:
+    ```bash
+    gcloud beta run jobs logs read sp500-goal-seek --project sp500-479009 --region europe-west2 --limit 50
+    ```
+
+Look for the `✅ Pre-built catalog found` message to confirm the optimization is active.
+
+### 5. Engine Consistency Check
+
+If you suspect differences between local and cloud results, run the consistency tool:
+```bash
+PYTHONPATH=. python src/test_utils/engine_consistency.py
+```
+This tool runs an identical search on both the standard engine (`GoalSeeker`) and the optimized engine (`CatalogSearcher`) and verifies their results match exactly.
+
 ---
 
 ## Project Structure

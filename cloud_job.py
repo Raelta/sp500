@@ -24,17 +24,7 @@ def run_job():
     # Params
     data_path = config.get("data_path", "spy_data_25yr.parquet")
     params_grid = config.get("params_grid")
-    fixed_params = config.get("fixed_params", {})
     
-    # Deserialize time_range if it exists
-    if 'time_range' in fixed_params:
-        tr = fixed_params['time_range']
-        if isinstance(tr, list) and len(tr) == 2:
-            fixed_params['time_range'] = (
-                datetime.strptime(tr[0], "%H:%M:%S").time(),
-                datetime.strptime(tr[1], "%H:%M:%S").time()
-            )
-            
     min_bumps = config.get("min_bumps", 0)
     output_path = config.get("output_path", "/tmp/results.csv")
     
@@ -63,7 +53,6 @@ def run_job():
         
     results = seeker.search(
         params_grid,
-        fixed_params=fixed_params,
         min_bumps=min_bumps,
         progress_callback=progress
     )

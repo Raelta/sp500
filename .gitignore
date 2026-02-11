@@ -9,3 +9,4 @@ __pycache__/
 catalog/metadata.npz
 catalog/change_matrix.npy
 .DS_Store
+key.json

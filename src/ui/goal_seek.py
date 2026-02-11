@@ -109,7 +109,6 @@ def render_goal_seek(df, cli_args, val_report):
     gs_params['slide_up_pct'] = (s_up_start, s_up_end, s_up_step)
     
     st.sidebar.divider()
-    use_current_filters = st.sidebar.checkbox("Use current Exploration filters", value=True)
     min_bumps_req = st.sidebar.number_input("Min Bumps Required", value=0, step=1)
     
     st.sidebar.divider()
@@ -152,10 +151,6 @@ def render_goal_seek(df, cli_args, val_report):
                     st.write(f"- **{k}**: {v[0]} (Locked)")
 
         fixed_params = { 'bump_thresh_type': 'percent', 'slide_thresh_type': 'percent' }
-        if use_current_filters and 'applied_config' in st.session_state:
-            ac = st.session_state.applied_config
-            fixed_params['time_range'] = ac['time_range']
-            fixed_params['days_of_week'] = ac['days_of_week']
 
         config_dict = {
             "params_grid": grid, "fixed_params": fixed_params,
