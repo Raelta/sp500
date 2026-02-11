@@ -150,3 +150,27 @@ class WindowCatalog:
         up = self.up_cumsum[start_idx + length] - self.up_cumsum[start_idx]
         
         return change, vol, up
+
+def check_catalog_status(catalog_dir="catalog", source_path="spy_data_25yr.parquet"):
+    """
+    Checks if the catalog exists and is up to date relative to the source data.
+    Returns: (status_code, message)
+    status_code: 'ok', 'missing', 'stale'
+    """
+    meta_path = os.path.join(catalog_dir, "metadata.npz")
+    change_path = os.path.join(catalog_dir, "change_matrix.npy")
+    
+    if not os.path.exists(catalog_dir) or not os.path.exists(meta_path) or not os.path.exists(change_path):
+        return 'missing', "Catalog not found. Optimization disabled."
+        
+    if not os.path.exists(source_path):
+        return 'ok', "Catalog found (source file missing, cannot check staleness)."
+        
+    # Check modification times
+    source_mtime = os.path.getmtime(source_path)
+    catalog_mtime = os.path.getmtime(meta_path)
+    
+    if source_mtime > catalog_mtime:
+        return 'stale', f"Catalog is outdated. Source data updated on {pd.Timestamp(source_mtime, unit='s')}."
+        
+    return 'ok', "Catalog is up to date."

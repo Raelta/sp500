@@ -35,15 +35,25 @@ class CloudRunner:
             return self._credentials
 
         # 1. Try Streamlit Secrets (for Cloud Deployment)
+        # We check for existence first to avoid catching and silencing file-not-found errors
+        # on local dev environments where secrets.toml doesn't exist.
         try:
             if "gcp_service_account" in st.secrets:
-                # Use the dictionary from secrets to create service account credentials
-                info = dict(st.secrets["gcp_service_account"])
-                self._credentials = service_account.Credentials.from_service_account_info(info)
-                return self._credentials
-        except Exception:
-            # st.secrets can raise an exception if the file doesn't exist
+                try:
+                    # Use the dictionary from secrets to create service account credentials
+                    info = dict(st.secrets["gcp_service_account"])
+                    self._credentials = service_account.Credentials.from_service_account_info(info)
+                    return self._credentials
+                except Exception as e:
+                    st.error(f"Failed to load credentials from 'gcp_service_account' in secrets: {e}")
+                    # If the user explicitly provided secrets but they are bad, we don't want
+                    # to silently fall back to ADC which might give a confusing error later.
+                    return None
+        except (KeyError, FileNotFoundError, RuntimeError):
+            # st.secrets access can fail if not configured or file missing
             pass
+        except Exception as e:
+            st.warning(f"Unexpected error accessing st.secrets: {e}")
 
         # 2. Fallback to Local Auth (ADC)
         try:
@@ -87,6 +97,20 @@ class CloudRunner:
             "**Cloud:** Add your service account JSON to Streamlit Secrets as [gcp_service_account]."
         )
 
+    def _handle_error(self, e, job_path):
+        """
+        Centralized error handling for GCP calls to provide better advice.
+        """
+        error_str = str(e)
+        if "metadata.google.internal" in error_str or "Compute Engine Metadata server" in error_str:
+            return (
+                "Authentication Error: The app is trying to use the Google Metadata server but cannot reach it.\n\n"
+                "**If you are running on Streamlit Cloud:** You must provide a service account key in Streamlit Secrets.\n"
+                "Add your service account JSON to secrets as `[gcp_service_account]`.\n\n"
+                "**If you are running locally:** Run `gcloud auth application-default login`."
+            )
+        return f"Cloud Error at {job_path}: {error_str}"
+
     def get_latest_execution(self, job_name):
         """
         Fetches the latest execution status for a given job.
@@ -107,6 +131,7 @@ class CloudRunner:
             )
             page = self.exec_client.list_executions(request=request)
             
+            # This might trigger the authentication call
             executions = list(page)
             if not executions:
                 return None, "No executions found for this job."
@@ -147,7 +172,7 @@ class CloudRunner:
                 "is_done": is_done
             }, None
         except Exception as e:
-            return None, str(e)
+            return None, self._handle_error(e, job_path)
 
     def run_job(self, job_name, config_dict):
         """
@@ -192,10 +217,12 @@ class CloudRunner:
             return True, f"Job {job_name} triggered successfully."
             
         except Exception as e:
-            st.error(f"Cloud Execution Failed at step {job_path}. Error: {str(e)}")
-            import traceback
-            st.code(traceback.format_exc())
-            return False, f"Error: {str(e)}"
+            friendly_msg = self._handle_error(e, job_path)
+            st.error(friendly_msg)
+            if friendly_msg.startswith("Cloud Error"):
+                import traceback
+                st.code(traceback.format_exc())
+            return False, friendly_msg
 
     def download_results(self, bucket_name, source_blob_name, dest_path):
         """
@@ -211,7 +238,7 @@ class CloudRunner:
             blob.download_to_filename(dest_path)
             return True, f"Downloaded {source_blob_name} to {dest_path}"
         except Exception as e:
-            return False, str(e)
+            return False, self._handle_error(e, f"GCS Bucket {bucket_name}")
 
     def generate_gcloud_command(self, job_name, config_dict, wrap=False):
         config_json = json.dumps(config_dict, cls=CloudEncoder)

@@ -3,6 +3,7 @@ import json
 import pandas as pd
 from datetime import datetime
 from src.search_engine import GoalSeeker
+from src.catalog_search import CatalogSearcher
 from src.data_loader import load_data_uncached
 
 def run_job():
@@ -37,17 +38,20 @@ def run_job():
     min_bumps = config.get("min_bumps", 0)
     output_path = config.get("output_path", "/tmp/results.csv")
     
-    print(f"Loading data: {data_path}")
-    df = load_data_uncached(data_path)
-    
-    # Pre-clean duplicates as app does
-    df = df.drop_duplicates(subset=['date'], keep='first').reset_index(drop=True)
-    
-    # Apply scope filters if present in fixed_params (normally handled by seeker, but good to be sure)
-    # Actually GoalSeeker handles time_range and days_of_week if passed in fixed_params.
+    # --- SEARCH ENGINE SELECTION ---
+    # Check if pre-built catalog exists
+    catalog_dir = "catalog"
+    if os.path.exists(os.path.join(catalog_dir, "metadata.npz")):
+        print(f"✅ Pre-built catalog found in /{catalog_dir}. Using CatalogSearcher optimization.")
+        seeker = CatalogSearcher(catalog_dir=catalog_dir)
+    else:
+        print(f"⚠️ Catalog not found. Loading raw data from {data_path} and using GoalSeeker.")
+        df = load_data_uncached(data_path)
+        # Pre-clean duplicates as app does
+        df = df.drop_duplicates(subset=['date'], keep='first').reset_index(drop=True)
+        seeker = GoalSeeker(df)
     
     print("Starting Search...")
-    seeker = GoalSeeker(df)
     
     def progress(msg, pct):
         print(f"[{pct*100:.1f}%] {msg}")

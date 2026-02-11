@@ -122,6 +122,10 @@ def render_goal_seek(df, cli_args, val_report):
             gcp_job_name = st.text_input("Job Name", value="sp500-goal-seek", key="gs_gcp_job_name")
             gcp_bucket = st.text_input("GCS Bucket", value="sp500-goal-seek-results", key="gs_gcp_bucket")
 
+    # Catalog Check
+    from src.catalog import check_catalog_status
+    cat_status, cat_msg = check_catalog_status()
+
     grid = generate_grid_from_ui(gs_params)
     grid['bump_threshold'] = [min_b_thresh]
     grid['slide_threshold'] = [min_s_thresh]
@@ -132,7 +136,7 @@ def render_goal_seek(df, cli_args, val_report):
         
         # 1. Trigger Section (Now at Top)
         st.write("### 🚀 Cloud Search Control")
-        auto_monitor_job(runner, gcp_job_name, gcp_bucket)
+        auto_monitor_job(runner, job_name=gcp_job_name, bucket=gcp_bucket)
 
         # Calculate search scale
         total_combos = 1
@@ -184,6 +188,13 @@ def render_goal_seek(df, cli_args, val_report):
                         st.error(msg)
 
         with st.expander("🛠️ Advanced / Manual Run", expanded=False):
+            if cat_status != 'ok':
+                st.warning(f"⚠️ **Catalog Issue:** {cat_msg}")
+                if cat_status == 'stale':
+                    st.info("💡 Run `python goal_seek_cli.py --build-catalog` to update your local catalog before deploying.")
+                else:
+                    st.info("💡 Run `python goal_seek_cli.py --build-catalog` to generate a catalog for faster cloud searches.")
+            
             st.code(runner.generate_gcloud_command(gcp_job_name, config_dict, wrap=True), language="bash")
             st.code(runner.get_deploy_instructions(gcp_job_name, "sp500-analyzer"), language="bash")
 

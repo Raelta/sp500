@@ -17,10 +17,11 @@ RUN pip install --no-cache-dir -r requirements.txt --root-user-action=ignore
 # Add GCP storage client for cloud_job
 RUN pip install --no-cache-dir google-cloud-storage --root-user-action=ignore
 
-# Copy source code
+# Copy source code and pre-built catalog (if exists)
 COPY src/ ./src/
 COPY spy_data_25yr.parquet .
 COPY cloud_job.py .
+COPY catalog/ ./catalog/
 
 # Entry point
 CMD ["python", "cloud_job.py"]
