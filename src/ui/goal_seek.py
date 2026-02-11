@@ -37,47 +37,62 @@ def generate_grid_from_ui(params):
         grid[key] = vals
     return grid
 
+def load_match_into_exploration(params):
+    new_config = st.session_state.get('applied_config', {}).copy()
+    new_config.update({
+        'bump_len': int(params['bump_len']),
+        'bump_threshold': float(params['bump_threshold']),
+        'bump_thresh_type': 'percent',
+        'slide_len': int(params['slide_len']),
+        'slide_threshold': float(params['slide_threshold']),
+        'slide_thresh_type': 'percent',
+        'min_bump_vol': int(params['min_bump_vol']),
+        'min_slide_vol': int(params['min_slide_vol']),
+        'bump_up_pct': float(params['bump_up_pct']),
+        'slide_up_pct': float(params['slide_up_pct']),
+    })
+    st.session_state.applied_config = new_config
+    st.session_state.app_mode = "Exploration"
+
 @st.fragment(run_every=5)
-def render_cloud_status(runner, job_name, bucket):
-    st.write("### 🛰️ Cloud Job Status (Auto-refreshing)")
+def auto_monitor_job(runner, job_name, bucket):
+    # Minimalistic status monitoring
     latest_exec, error_msg = runner.get_latest_execution(job_name)
     
     if error_msg:
-        st.error(f"Failed to fetch job status: {error_msg}")
-        if st.button("🔄 Manual Retry"):
-            st.rerun()
+        st.caption(f"⚠️ Status check: {error_msg}")
     elif latest_exec:
-        col1, col2, col3 = st.columns([2, 1, 1])
-        with col1:
-            st.write(f"**Last Run:** `{latest_exec['id']}`")
-            st.caption(f"Started: {latest_exec['start_time']}")
-        with col2:
-            status_colors = {"SUCCEEDED": "green", "RUNNING": "blue", "FAILED": "red", "PENDING": "orange"}
-            color = status_colors.get(latest_exec['status'], "gray")
-            st.markdown(f"Status: **:{color}[{latest_exec['status']}]**")
-        with col3:
-            if st.button("🔄 Refresh Now"):
-                st.rerun()
-
-        if latest_exec['is_done'] and latest_exec['status'] == "SUCCEEDED":
-            st.success("Cloud job finished! You can now load the results below.")
+        status = latest_exec['status']
+        color = {"SUCCEEDED": "green", "RUNNING": "blue", "FAILED": "red", "PENDING": "orange"}.get(status, "gray")
+        
+        st.markdown(f"**Last Job Status:** :{color}[{status}] (`{latest_exec['id']}`)")
+        
+        if status == "SUCCEEDED":
+            # Auto-download if new
+            if st.session_state.get('last_loaded_exec_id') != latest_exec['id']:
+                with st.spinner("New results found! Loading..."):
+                    local_path = "cloud_results.csv"
+                    success, msg = runner.download_results(bucket, "results.csv", local_path)
+                    if success:
+                        try:
+                            df_res = pd.read_csv(local_path)
+                            st.session_state.gs_results = df_res.sort_values('total_hits', ascending=False).head(50)
+                            st.session_state.last_loaded_exec_id = latest_exec['id']
+                            st.rerun()
+                        except Exception: pass
         elif latest_exec['is_running']:
-            st.info("⏳ Job is currently running in the cloud. Results will be ready soon.")
-    else:
-        st.info("No previous cloud executions found for this job.")
+            st.caption("⏳ Job is running. Results will load automatically when finished.")
 
 def render_goal_seek(df, cli_args, val_report):
+    # --- SIDEBAR INPUTS ---
     st.sidebar.title("Goal Seek Parameters")
-    
     gs_params = {}
     b_len_start, b_len_end, b_len_step = render_range_input("Bump Length (min)", 1, 390, 3, 6, 1, "gs_b_len")
     gs_params['bump_len'] = (b_len_start, b_len_end, b_len_step)
-    
     s_len_start, s_len_end, s_len_step = render_range_input("Slide Length (min)", 1, 390, 3, 6, 1, "gs_s_len")
     gs_params['slide_len'] = (s_len_start, s_len_end, s_len_step)
     
     st.sidebar.divider()
-    st.sidebar.markdown("**Thresholds (Minima)**")
     min_b_thresh = st.sidebar.number_input("Min Bump Threshold %", value=3.0, step=0.1, key="gs_min_b_thresh")
     min_s_thresh = st.sidebar.number_input("Min Slide Threshold %", value=3.0, step=0.1, key="gs_min_s_thresh")
     
@@ -94,19 +109,12 @@ def render_goal_seek(df, cli_args, val_report):
     gs_params['slide_up_pct'] = (s_up_start, s_up_end, s_up_step)
     
     st.sidebar.divider()
-    st.sidebar.markdown("**Search Scope**")
-    use_current_filters = st.sidebar.checkbox("Use current Exploration filters (Years/Time/Days)", value=True)
+    use_current_filters = st.sidebar.checkbox("Use current Exploration filters", value=True)
     min_bumps_req = st.sidebar.number_input("Min Bumps Required", value=0, step=1)
     
     st.sidebar.divider()
     run_cloud = st.sidebar.checkbox("☁️ Offload to Cloud (GCP)", value=True)
     
-    # Pre-generate grid for use in buttons
-    grid = generate_grid_from_ui(gs_params)
-    grid['bump_threshold'] = [min_b_thresh]
-    grid['slide_threshold'] = [min_s_thresh]
-
-    # --- CLOUD MODE UI ---
     if run_cloud:
         with st.sidebar.expander("🛠️ GCP Configuration", expanded=False):
             gcp_project = st.text_input("Project ID", value="sp500-479009", key="gs_gcp_project")
@@ -114,15 +122,31 @@ def render_goal_seek(df, cli_args, val_report):
             gcp_job_name = st.text_input("Job Name", value="sp500-goal-seek", key="gs_gcp_job_name")
             gcp_bucket = st.text_input("GCS Bucket", value="sp500-goal-seek-results", key="gs_gcp_bucket")
 
+    grid = generate_grid_from_ui(gs_params)
+    grid['bump_threshold'] = [min_b_thresh]
+    grid['slide_threshold'] = [min_s_thresh]
+
+    # --- MAIN CONTENT ---
+    if run_cloud:
         runner = CloudRunner(project_id=gcp_project, region=gcp_region)
         
-        # 1. Job Status Dashboard (Fragmented for auto-refresh)
-        render_cloud_status(runner, gcp_job_name, gcp_bucket)
-        
-        st.divider()
+        # 1. Trigger Section (Now at Top)
+        st.write("### 🚀 Cloud Search Control")
+        auto_monitor_job(runner, gcp_job_name, gcp_bucket)
 
-        # 2. Execution Controls
-        st.write("### 🚀 Trigger New Job")
+        # Calculate search scale
+        total_combos = 1
+        for v in grid.values():
+            total_combos *= len(v)
+        
+        st.markdown(f"**Search Scale:** `{total_combos}` combinations")
+        with st.expander("View Parameter Summary", expanded=False):
+            for k, v in grid.items():
+                if len(v) > 1:
+                    st.write(f"- **{k}**: {min(v)} to {max(v)} ({len(v)} steps)")
+                else:
+                    st.write(f"- **{k}**: {v[0]} (Locked)")
+
         fixed_params = { 'bump_thresh_type': 'percent', 'slide_thresh_type': 'percent' }
         if use_current_filters and 'applied_config' in st.session_state:
             ac = st.session_state.applied_config
@@ -130,73 +154,67 @@ def render_goal_seek(df, cli_args, val_report):
             fixed_params['days_of_week'] = ac['days_of_week']
 
         config_dict = {
-            "params_grid": grid,
-            "fixed_params": fixed_params,
-            "min_bumps": min_bumps_req,
-            "gcs_output_path": f"gs://{gcp_bucket}/results.csv"
+            "params_grid": grid, "fixed_params": fixed_params,
+            "min_bumps": min_bumps_req, "gcs_output_path": f"gs://{gcp_bucket}/results.csv"
         }
 
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("🚀 Trigger Cloud Job Now", type="primary", use_container_width=True):
+            if st.button("🚀 Start New Cloud Search", type="primary", use_container_width=True):
                 with st.spinner("Triggering..."):
                     success, output = runner.run_job(gcp_job_name, config_dict)
                     if success:
-                        st.success(output)
+                        st.session_state.last_loaded_exec_id = None # Force reload on next success
                         st.rerun()
                     else:
                         st.error(output)
         with col2:
-            with st.expander("Show Manual Command"):
-                st.code(runner.generate_gcloud_command(gcp_job_name, config_dict), language="bash")
+            if st.button("📥 Force Download Results", use_container_width=True):
+                with st.spinner("Downloading..."):
+                    local_path = "cloud_results.csv"
+                    success, msg = runner.download_results(gcp_bucket, "results.csv", local_path)
+                    if success:
+                        try:
+                            df_res = pd.read_csv(local_path)
+                            st.session_state.gs_results = df_res.sort_values('total_hits', ascending=False).head(50)
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Load failed: {e}")
+                    else:
+                        st.error(msg)
 
-        st.divider()
+        with st.expander("🛠️ Advanced / Manual Run", expanded=False):
+            st.code(runner.generate_gcloud_command(gcp_job_name, config_dict, wrap=True), language="bash")
+            st.code(runner.get_deploy_instructions(gcp_job_name, "sp500-analyzer"), language="bash")
 
-        # 3. Result Retrieval
-        st.write("### 📥 Retrieve Results")
-        if st.button("📥 Download & View Cloud Results", use_container_width=True):
-            with st.spinner("Fetching from GCS..."):
-                local_path = "cloud_results.csv"
-                success, msg = runner.download_results(gcp_bucket, "results.csv", local_path)
-                if success:
-                    try:
-                        df_res = pd.read_csv(local_path)
-                        st.session_state.gs_results = df_res.sort_values('total_hits', ascending=False).head(50)
-                        st.success("Results loaded into table below!")
-                        # st.rerun() # Optional: rerun to ensure table renders fresh
-                    except Exception as e:
-                        st.error(f"Error loading CSV: {e}")
-                else:
-                    st.error(f"Download failed: {msg}")
-
-    # --- LOCAL MODE UI ---
     else:
-        st.write("### 💻 Local Search")
-        if st.button("🚀 Run Local Goal Seek", type="primary"):
-            seeker = GoalSeeker(df) # Logic for filtering omitted for brevity or add here
+        st.write("### 💻 Local Search Control")
+        if st.button("🚀 Run Local Goal Seek", type="primary", use_container_width=True):
+            seeker = GoalSeeker(df)
             progress_bar = st.progress(0)
             status_text = st.empty()
             def update_progress(msg, pct):
                 progress_bar.progress(pct)
                 status_text.text(msg)
-            
             start_t = time.time()
             results_df = seeker.search(grid, min_bumps=min_bumps_req, progress_callback=update_progress)
-            elapsed = time.time() - start_t
-            
             if not results_df.empty:
-                st.success(f"Search complete in {elapsed:.2f}s.")
                 st.session_state.gs_results = results_df.sort_values('total_hits', ascending=False).head(50)
+                st.success("Search complete.")
             else:
                 st.error("No results found.")
-                st.session_state.gs_results = None
 
-    # --- RESULTS TABLE (COMMON) ---
+    # --- RESULTS SECTION ---
     if 'gs_results' in st.session_state and st.session_state.gs_results is not None:
-        st.write("---")
-        st.write("### 📊 Top 50 Results")
-        st.info("💡 Click a row and then 'Load configuration' to visualize.")
+        st.divider()
+        st.write("### 📊 Search Results")
         
+        if run_cloud:
+            runner = CloudRunner(project_id=gcp_project, region=gcp_region)
+            latest_exec, _ = runner.get_latest_execution(gcp_job_name)
+            if latest_exec and latest_exec.get('duration'):
+                st.info(f"⏱️ Cloud Calculation Time: **{latest_exec['duration']}**")
+
         display_df = st.session_state.gs_results.copy()
         cols = ['total_hits', 'true_hits', 'total_bumps', 'bump_len', 'slide_len', 'bump_threshold', 'slide_threshold', 'min_bump_vol', 'min_slide_vol', 'best_hit_date']
         existing_cols = [c for c in cols if c in display_df.columns]
@@ -212,21 +230,5 @@ def render_goal_seek(df, cli_args, val_report):
         if len(event.selection.rows) > 0:
             selected_row_idx = event.selection.rows[0]
             selected_params = display_df.iloc[selected_row_idx]
-            
-            if st.button(f"Load configuration into Exploration View"):
-                new_config = st.session_state.get('applied_config', {}).copy()
-                new_config.update({
-                    'bump_len': int(selected_params['bump_len']),
-                    'bump_threshold': float(selected_params['bump_threshold']),
-                    'bump_thresh_type': 'percent',
-                    'slide_len': int(selected_params['slide_len']),
-                    'slide_threshold': float(selected_params['slide_threshold']),
-                    'slide_thresh_type': 'percent',
-                    'min_bump_vol': int(selected_params['min_bump_vol']),
-                    'min_slide_vol': int(selected_params['min_slide_vol']),
-                    'bump_up_pct': float(selected_params['bump_up_pct']),
-                    'slide_up_pct': float(selected_params['slide_up_pct']),
-                })
-                st.session_state.applied_config = new_config
-                st.session_state.app_mode = "Exploration"
-                st.rerun()
+            load_match_into_exploration(selected_params)
+            st.rerun()

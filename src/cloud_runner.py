@@ -131,10 +131,18 @@ class CloudRunner:
                 status = "PENDING"
                 is_running = True
 
+            # Determine duration
+            duration_str = None
+            if latest.create_time and latest.completion_time:
+                duration = latest.completion_time - latest.create_time
+                duration_str = f"{duration.total_seconds():.1f}s"
+
             return {
                 "id": latest.name.split("/")[-1],
                 "status": status,
                 "start_time": latest.create_time,
+                "completion_time": latest.completion_time,
+                "duration": duration_str,
                 "is_running": is_running,
                 "is_done": is_done
             }, None
@@ -145,8 +153,11 @@ class CloudRunner:
         """
         Triggers a Cloud Run Job by updating its environment variables and then executing it.
         """
+        st.info(f"Initiating cloud job: {job_name}...")
+        
         ok, msg = self.check_credentials()
         if not ok:
+            st.error(f"Credentials check failed: {msg}")
             return False, msg
 
         config_json = json.dumps(config_dict, cls=CloudEncoder)
@@ -154,7 +165,7 @@ class CloudRunner:
         job_path = f"{parent}/jobs/{job_name}"
         
         try:
-            # 1. Update the Job with new configuration
+            st.write(f"Step 1: Fetching job configuration for {job_name}...")
             job = self.run_client.get_job(name=job_path)
             
             env_vars = job.template.template.containers[0].env
@@ -169,15 +180,21 @@ class CloudRunner:
             if not found:
                 env_vars.append(run_v2.EnvVar(name="GOAL_SEEK_CONFIG", value=f"^~^{config_json}"))
             
+            st.write("Step 2: Updating job with new parameters...")
             update_operation = self.run_client.update_job(job=job)
             update_operation.result() 
             
-            # 2. Execute the Job
+            st.write("Step 3: Triggering execution...")
             run_operation = self.run_client.run_job(name=job_path)
+            # Fetch the execution name from response if possible
             
-            return True, f"Job {job_name} updated and triggered successfully."
+            st.success(f"Execution started successfully.")
+            return True, f"Job {job_name} triggered successfully."
             
         except Exception as e:
+            st.error(f"Cloud Execution Failed at step {job_path}. Error: {str(e)}")
+            import traceback
+            st.code(traceback.format_exc())
             return False, f"Error: {str(e)}"
 
     def download_results(self, bucket_name, source_blob_name, dest_path):
@@ -196,23 +213,27 @@ class CloudRunner:
         except Exception as e:
             return False, str(e)
 
-    def generate_gcloud_command(self, job_name, config_dict):
+    def generate_gcloud_command(self, job_name, config_dict, wrap=False):
         config_json = json.dumps(config_dict, cls=CloudEncoder)
         config_json_escaped = config_json.replace('"', '\\"')
         project_flag = f"--project {self.project_id}" if self.project_id else ""
         
+        sep = " \\\n    " if wrap else " "
+        
         update_cmd = (
-            f"gcloud beta run jobs update {job_name} "
-            f"--region {self.region} {project_flag} "
+            f"gcloud beta run jobs update {job_name}{sep}"
+            f"--region {self.region}{sep}"
+            f"{project_flag}{sep}"
             f"--set-env-vars \"^~^GOAL_SEEK_CONFIG={config_json_escaped}\""
         )
         
         execute_cmd = (
-            f"gcloud beta run jobs execute {job_name} "
-            f"--region {self.region} {project_flag}"
+            f"gcloud beta run jobs execute {job_name}{sep}"
+            f"--region {self.region}{sep}"
+            f"{project_flag}"
         )
         
-        return f"{update_cmd} && {execute_cmd}"
+        return f"{update_cmd}\n\n# AND THEN RUN:\n{execute_cmd}"
 
     def get_deploy_instructions(self, job_name, image_name):
         return f"""
