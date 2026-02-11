@@ -43,6 +43,11 @@ def run_job():
     catalog_dir = "catalog"
     if os.path.exists(os.path.join(catalog_dir, "metadata.npz")):
         print(f"✅ Pre-built catalog found in /{catalog_dir}. Using CatalogSearcher optimization.")
+        # Debug: list files in catalog to verify upload
+        try:
+            files = os.listdir(catalog_dir)
+            print(f"📁 Catalog directory contents: {files}")
+        except Exception: pass
         seeker = CatalogSearcher(catalog_dir=catalog_dir)
     else:
         print(f"⚠️ Catalog not found. Loading raw data from {data_path} and using GoalSeeker.")

@@ -90,11 +90,25 @@ class CloudRunner:
         creds = self.get_credentials()
         if creds:
             return True, "Credentials found."
+
+        # Debug info for the user
+        available_secrets = []
+        try:
+            available_secrets = list(st.secrets.keys())
+        except Exception:
+            pass
+
+        secret_hint = ""
+        if available_secrets:
+            secret_hint = f"\n\n(Debug: Streamlit sees these secret keys: `{', '.join(available_secrets)}`)"
+        else:
+            secret_hint = "\n\n(Debug: Streamlit sees NO secrets configured)"
         
         return False, (
             "Google Cloud Credentials not found.\n\n"
             "**Locally:** Run 'gcloud auth application-default login' in your terminal.\n"
-            "**Cloud:** Add your service account JSON to Streamlit Secrets as [gcp_service_account]."
+            "**Cloud:** Add your service account JSON to Streamlit Secrets as `[gcp_service_account]`."
+            f"{secret_hint}"
         )
 
     def _handle_error(self, e, job_path):
@@ -218,7 +232,8 @@ class CloudRunner:
             
         except Exception as e:
             friendly_msg = self._handle_error(e, job_path)
-            st.error(friendly_msg)
+            # We don't st.error(friendly_msg) here anymore, 
+            # as the caller (UI) is responsible for displaying the returned error.
             if friendly_msg.startswith("Cloud Error"):
                 import traceback
                 st.code(traceback.format_exc())

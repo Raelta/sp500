@@ -1,0 +1,13 @@
+.gcloudignore
+.git
+.gitignore
+.venv
+__pycache__/
+*.csv
+*.png
+*.html
+.hypothesis/
+.DS_Store
+
+# Include the catalog directory and its contents
+!catalog/
