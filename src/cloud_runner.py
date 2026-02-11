@@ -83,6 +83,20 @@ class CloudRunner:
             self._storage_client = storage.Client(credentials=creds, project=self.project_id)
         return self._storage_client
 
+    def _get_secrets_debug_info(self):
+        """
+        Safely gathers debug information about available Streamlit secrets.
+        """
+        available_secrets = []
+        try:
+            available_secrets = list(st.secrets.keys())
+        except Exception:
+            pass
+
+        if available_secrets:
+            return f"\n\n(Debug: Streamlit sees these secret keys: `{', '.join(available_secrets)}`)"
+        return "\n\n(Debug: Streamlit sees NO secrets configured)"
+
     def check_credentials(self):
         """
         Verifies if credentials are available and provides advice if missing.
@@ -91,18 +105,7 @@ class CloudRunner:
         if creds:
             return True, "Credentials found."
 
-        # Debug info for the user
-        available_secrets = []
-        try:
-            available_secrets = list(st.secrets.keys())
-        except Exception:
-            pass
-
-        secret_hint = ""
-        if available_secrets:
-            secret_hint = f"\n\n(Debug: Streamlit sees these secret keys: `{', '.join(available_secrets)}`)"
-        else:
-            secret_hint = "\n\n(Debug: Streamlit sees NO secrets configured)"
+        secret_hint = self._get_secrets_debug_info()
         
         return False, (
             "Google Cloud Credentials not found.\n\n"
@@ -117,11 +120,13 @@ class CloudRunner:
         """
         error_str = str(e)
         if "metadata.google.internal" in error_str or "Compute Engine Metadata server" in error_str:
+            secret_hint = self._get_secrets_debug_info()
             return (
                 "Authentication Error: The app is trying to use the Google Metadata server but cannot reach it.\n\n"
                 "**If you are running on Streamlit Cloud:** You must provide a service account key in Streamlit Secrets.\n"
                 "Add your service account JSON to secrets as `[gcp_service_account]`.\n\n"
                 "**If you are running locally:** Run `gcloud auth application-default login`."
+                f"{secret_hint}"
             )
         return f"Cloud Error at {job_path}: {error_str}"
 
