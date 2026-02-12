@@ -10,12 +10,13 @@ A Python application designed to analyze intraday SPY (S&P 500 ETF) data for "Bu
 - **Goal Seek (UI Integrated)**:
   - **Exhaustive Search**: Define parameter ranges directly in the Web UI and find the most successful combinations.
   - **Local & Cloud Execution**: Run searches on your local machine or offload them to Google Cloud for high performance.
-  - **Result Summary**: View key metrics (Matches, Max Hits) and yearly distribution for top results.
+  - **Cloud Results Viewer**: Browse history of previous cloud runs, filter by user label, and load past results instantly.
+  - **Auto-Monitoring**: Real-time progress bars and status updates for active cloud jobs, with estimated completion times.
   - **One-Click Visualization**: Click any result in the Goal Seek table to instantly load it into the Exploration view.
 - **High Performance Search Engine**:
+  - **Hybrid Catalog System**: Combines memory-mapped matrices and in-memory cumulative arrays for ultra-fast lookups.
   - **Parallel Processing**: Utilizes all available CPU cores to execute searches concurrently.
   - **Vectorized Broadcasting**: Uses NumPy matrix multiplication to check thousands of combinations simultaneously.
-  - **Window Catalog**: Pre-compute metrics to disk for near-instant lookups (Catalog mode).
 - **Interactive Dashboard**: 
   - Powerful Streamlit app with reactive analysis.
   - Interactive Plotly visualizations with zoom, pan, and hover details.
@@ -48,6 +49,30 @@ streamlit run app.py
 
 *   **Exploration Mode**: Manually adjust parameters and visualize patterns on a chart.
 *   **Goal Seek Mode**: Enter ranges for parameters and find the best performing configurations.
+
+### Goal Seek CLI
+
+For headless execution or scripting, use the dedicated CLI tool.
+
+```bash
+# Basic run with default settings
+python goal_seek_cli.py
+
+# Specify parameter ranges
+python goal_seek_cli.py --bump-len-start 5 --bump-len-end 10 --min-bump-threshold 5.0
+
+# Filter by minimum number of bumps
+python goal_seek_cli.py --min-bumps 10
+
+# Catalog Management
+python goal_seek_cli.py --build-catalog   # Build the optimized catalog
+python goal_seek_cli.py --use-catalog     # Run search using the catalog
+```
+
+**Key Arguments:**
+- `--min-bumps`: Filter results requiring a minimum number of pattern occurrences.
+- `--min-bump-threshold`: Set the minimum bump % threshold (replaces start/end/step logic for thresholds).
+- `--use-catalog`: Enable the Hybrid Catalog engine for maximum performance.
 
 ---
 
@@ -282,6 +307,7 @@ The app uses **Google Cloud Build** so you don't need Docker installed locally.
 You can verify if the cloud job is running correctly (and using the optimized Catalog) by checking the logs:
 
 -   **Web Console**: Go to [Cloud Run Jobs](https://console.cloud.google.com/run/jobs) -> `sp500-goal-seek` -> **Logs** tab.
+-   **App UI**: The Goal Seek page now features an **Auto-Monitor** section that displays a progress bar, status updates, and live logs for active jobs.
 -   **CLI**:
     ```bash
     gcloud beta run jobs logs read sp500-goal-seek --project sp500-479009 --region europe-west2 --limit 50
@@ -289,7 +315,14 @@ You can verify if the cloud job is running correctly (and using the optimized Ca
 
 Look for the `✅ Pre-built catalog found` message to confirm the optimization is active.
 
-### 5. Engine Consistency Check
+### 5. Results & History
+
+The application now includes a **Cloud Results Viewer**:
+-   **Run History**: Automatically logs every cloud execution with a timestamp and parameters.
+-   **User Labels**: Tag your runs with a user label to easily filter and identify your experiments.
+-   **One-Click Load**: Browse the history table and click "Load Run" to pull previous results into the dashboard without re-running.
+
+### 6. Engine Consistency Check
 
 If you suspect differences between local and cloud results, run the consistency tool:
 ```bash

@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-02-12
+
 ### Added
 - **Cloud Results Viewer**: New UI feature in Goal Seek to browse, filter, and load previous cloud execution results.
   - **Run History**: Automatically logs metadata (parameters, timestamp) for every cloud run.
