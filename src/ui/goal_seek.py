@@ -4,7 +4,7 @@ import numpy as np
 import time
 from datetime import datetime
 from src.search_engine import GoalSeeker
-from src.ui.utils import log_perf
+from src.ui.utils import log_perf, derive_result_blob_name
 from src.cloud_runner import CloudRunner
 from src.analyzer import find_bumps_and_slides
 from src.ui.results import render_results
@@ -252,7 +252,7 @@ def render_goal_seek(df, cli_args, val_report):
                              meta['status'] = 'COMPLETED'
                              # Derive result blob name from metadata blob name
                              # metadata_user_2026...json -> results_user_2026...csv
-                             result_blob_name = blob_name.replace("metadata_", "results_", 1).replace(".json", ".csv")
+                             result_blob_name = derive_result_blob_name(blob_name)
                              meta['result_blob'] = result_blob_name
                              combined_history.append(meta)
 

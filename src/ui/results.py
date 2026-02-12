@@ -3,7 +3,7 @@ import pandas as pd
 import time as time_module
 from src.visualizer import plot_pattern
 from src.news_provider import get_google_news_url
-from src.ui.utils import log_perf
+from src.ui.utils import log_perf, get_change_labels
 
 def render_results(results, stats, config, df_filtered, val_report=None):
     """
@@ -23,11 +23,7 @@ def render_results(results, stats, config, df_filtered, val_report=None):
     bump_type = config.get('bump_thresh_type', 'percent')
     slide_type = config.get('slide_thresh_type', 'percent')
     
-    bump_label = "Bump Change %" if bump_type == 'percent' else "Bump Change"
-    slide_label = "Slide Change %" if slide_type == 'percent' else "Slide Change"
-    
-    bump_suffix = "%" if bump_type == 'percent' else ""
-    slide_suffix = "%" if slide_type == 'percent' else ""
+    bump_label, slide_label, bump_suffix, slide_suffix = get_change_labels(bump_type, slide_type)
 
     # Display Stats (Hit Rate)
     if stats:

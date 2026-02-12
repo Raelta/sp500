@@ -12,21 +12,27 @@ def log_memory(label=""):
     mem = process.memory_info().rss / 1024 / 1024  # in MB
     print(f"[{datetime.now().strftime('%H:%M:%S')}] [MEM] {label}: {mem:.2f} MB", flush=True)
 
-def run_job():
-    log_memory("Job Start")
-    # Cloud Run Jobs provide configuration via environment variables or files
-    # We'll expect a JSON string in GOAL_SEEK_CONFIG
-    config_str = os.environ.get("GOAL_SEEK_CONFIG")
+def parse_job_config(config_str):
     if not config_str:
-        print("Error: GOAL_SEEK_CONFIG environment variable not set.")
-        return
+        return None
 
     # Strip gcloud escape prefix if present (e.g. ^~^ or ^:^)
     # Prefix format is ^DELIMITER^
     if config_str.startswith("^") and len(config_str) > 3 and config_str[2] == "^":
         config_str = config_str[3:]
 
-    config = json.loads(config_str)
+    return json.loads(config_str)
+
+def run_job():
+    log_memory("Job Start")
+    # Cloud Run Jobs provide configuration via environment variables or files
+    # We'll expect a JSON string in GOAL_SEEK_CONFIG
+    config_str = os.environ.get("GOAL_SEEK_CONFIG")
+    
+    config = parse_job_config(config_str)
+    if not config:
+        print("Error: GOAL_SEEK_CONFIG environment variable not set.")
+        return
     
     # Params
     data_path = config.get("data_path", "spy_data_25yr.parquet")

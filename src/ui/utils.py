@@ -136,6 +136,7 @@ def inject_compact_sidebar_style():
             min-height: 28px !important;
             padding-top: 0px !important;
             padding-bottom: 0px !important;
+            font-size: 0.8rem !important;
         }
         
         /* Compact Number Input Buttons */
@@ -170,3 +171,22 @@ def inject_compact_sidebar_style():
         """,
         unsafe_allow_html=True,
     )
+
+def derive_result_blob_name(metadata_blob_name):
+    """
+    Derives the result blob name (CSV) from the metadata blob name (JSON).
+    e.g. metadata_user_2026.json -> results_user_2026.csv
+    """
+    return metadata_blob_name.replace("metadata_", "results_", 1).replace(".json", ".csv")
+
+def get_change_labels(bump_type, slide_type):
+    """
+    Returns labels and suffixes for bump/slide changes based on threshold type.
+    """
+    bump_label = "Bump Change %" if bump_type == 'percent' else "Bump Change"
+    slide_label = "Slide Change %" if slide_type == 'percent' else "Slide Change"
+    
+    bump_suffix = "%" if bump_type == 'percent' else ""
+    slide_suffix = "%" if slide_type == 'percent' else ""
+    
+    return bump_label, slide_label, bump_suffix, slide_suffix
