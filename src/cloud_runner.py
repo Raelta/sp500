@@ -269,6 +269,43 @@ class CloudRunner:
         except Exception as e:
             return False, self._handle_error(e, f"GCS Bucket {bucket_name}")
 
+    def list_blobs(self, bucket_name, prefix=None):
+        """
+        Lists all blobs in the bucket that begin with the prefix.
+        """
+        ok, msg = self.check_credentials()
+        if not ok:
+            return []
+
+        try:
+            bucket = self.storage_client.bucket(bucket_name)
+            # This returns an iterator
+            blobs = bucket.list_blobs(prefix=prefix)
+            # Sort by name (timestamp is in name usually) descending to get latest first if named correctly
+            # But the caller can sort. We just return the list.
+            return [b.name for b in blobs]
+        except Exception as e:
+            # Silent fail or log? Better to log for debug but silent for UI
+            print(f"Error listing blobs: {e}")
+            return []
+
+    def read_json_blob(self, bucket_name, blob_name):
+        """
+        Reads a JSON blob directly from GCS and returns the dict.
+        """
+        ok, msg = self.check_credentials()
+        if not ok:
+            return None
+
+        try:
+            bucket = self.storage_client.bucket(bucket_name)
+            blob = bucket.blob(blob_name)
+            content = blob.download_as_text()
+            return json.loads(content)
+        except Exception as e:
+            print(f"Error reading blob {blob_name}: {e}")
+            return None
+
     def generate_gcloud_command(self, job_name, config_dict, wrap=False):
         config_json = json.dumps(config_dict, cls=CloudEncoder)
         config_json_escaped = config_json.replace('"', '\\"')

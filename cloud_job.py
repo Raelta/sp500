@@ -84,6 +84,32 @@ def run_job():
                 blob = bucket.blob(blob_name)
                 blob.upload_from_filename(output_path)
                 print(f"Uploaded results to {gcs_output}")
+
+                # Upload Metadata if requested
+                metadata_output = config.get("metadata_output_path")
+                if metadata_output:
+                    # reuse client/bucket if same bucket (likely)
+                    meta_bucket_name = metadata_output.replace("gs://", "").split("/")[0]
+                    meta_blob_name = "/".join(metadata_output.replace("gs://", "").split("/")[1:])
+                    
+                    if meta_bucket_name == bucket_name:
+                        meta_bucket = bucket
+                    else:
+                        meta_bucket = client.bucket(meta_bucket_name)
+                        
+                    metadata = {
+                        "timestamp": datetime.now().isoformat(),
+                        "params_grid": params_grid,
+                        "min_bumps": min_bumps,
+                        "result_blob": blob_name,
+                        "total_results": len(results),
+                        "optimization_mode": optimization_mode
+                    }
+                    
+                    meta_blob = meta_bucket.blob(meta_blob_name)
+                    meta_blob.upload_from_string(json.dumps(metadata), content_type='application/json')
+                    print(f"Uploaded metadata to {metadata_output}")
+
             except Exception as e:
                 print(f"Error uploading to GCS: {e}")
 

@@ -5,6 +5,10 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Cloud Results Viewer**: New UI feature in Goal Seek to browse, filter, and load previous cloud execution results.
+  - **Run History**: Automatically logs metadata (parameters, timestamp) for every cloud run.
+  - **Versioning**: Each cloud run now saves to a unique timestamped file, preserving history.
+  - **Integration**: Seamless loading of historical results into the analysis view.
 - **Metric Upgrade**: Introduced "True Hits" (best unique matches) and "Total Hits" (all overlapping matches) metrics.
 - **Data Gap Detection**: New `data_gap` column identifies matches with time discontinuities (e.g., missing minutes, day boundaries).
 - **Goal Seek CLI**: Updated output to sort by Total Hits and include `best_hit_date` and hit counts.

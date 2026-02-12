@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import time
 import json
+from datetime import datetime
 from src.search_engine import GoalSeeker
 from src.ui.utils import log_perf
 from src.cloud_runner import CloudRunner
@@ -69,8 +70,26 @@ def auto_monitor_job(runner, job_name, bucket):
         st.markdown(f"**Last Job Status:** :{color}[{status}] (`{latest_exec['id']}`)")
         
         if status == "SUCCEEDED":
-            # Auto-download if new
-            if st.session_state.get('last_loaded_exec_id') != latest_exec['id']:
+            # Check for current session run ID first
+            current_run_id = st.session_state.get('current_cloud_run_id')
+            
+            if current_run_id:
+                if st.session_state.get('last_loaded_run_id') != current_run_id:
+                     # Attempt to load the specific result file for this run
+                     target_file = f"results_{current_run_id}.csv"
+                     with st.spinner(f"Run finished! Downloading {target_file}..."):
+                        local_path = "cloud_results.csv"
+                        success, msg = runner.download_results(bucket, target_file, local_path)
+                        if success:
+                            try:
+                                df_res = pd.read_csv(local_path)
+                                st.session_state.gs_results = df_res.sort_values('total_hits', ascending=False).head(50)
+                                st.session_state.last_loaded_run_id = current_run_id
+                                st.rerun()
+                            except Exception: pass
+            
+            # Fallback: Auto-download "results.csv" if no run_id is tracked (legacy behavior or external trigger)
+            elif st.session_state.get('last_loaded_exec_id') != latest_exec['id']:
                 with st.spinner("New results found! Loading..."):
                     local_path = "cloud_results.csv"
                     success, msg = runner.download_results(bucket, "results.csv", local_path)
@@ -81,6 +100,7 @@ def auto_monitor_job(runner, job_name, bucket):
                             st.session_state.last_loaded_exec_id = latest_exec['id']
                             st.rerun()
                         except Exception: pass
+
         elif latest_exec['is_running']:
             st.caption("⏳ Job is running. Results will load automatically when finished.")
 
@@ -142,7 +162,7 @@ def render_goal_seek(df, cli_args, val_report):
     if run_cloud:
         runner = CloudRunner(project_id=gcp_project, region=gcp_region)
         
-        # 1. Trigger Section (Now at Top)
+        # 1. Trigger Section
         st.write("### 🚀 Cloud Search Control")
         auto_monitor_job(runner, job_name=gcp_job_name, bucket=gcp_bucket)
 
@@ -158,29 +178,106 @@ def render_goal_seek(df, cli_args, val_report):
                     st.write(f"- **{k}**: {min(v)} to {max(v)} ({len(v)} steps)")
                 else:
                     st.write(f"- **{k}**: {v[0]} (Locked)")
+        
+        # --- NEW: Load Previous Runs ---
+        with st.expander("📂 Load Previous Results", expanded=False):
+            col_refresh, _ = st.columns([1,3])
+            with col_refresh:
+                if st.button("🔄 Refresh Run History"):
+                    with st.spinner("Fetching run history..."):
+                        # List metadata files
+                        blobs = runner.list_blobs(gcp_bucket, prefix="metadata_")
+                        history = []
+                        for blob_name in blobs:
+                            # Parse metadata files on demand
+                            meta = runner.read_json_blob(gcp_bucket, blob_name)
+                            if meta:
+                                history.append(meta)
+                        
+                        # Sort by timestamp desc
+                        history.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+                        st.session_state.run_history = history
+            
+            if 'run_history' in st.session_state and st.session_state.run_history:
+                # create a display dataframe
+                hist_data = []
+                for h in st.session_state.run_history:
+                    # Summarize params: count variations
+                    p_summary = ", ".join([f"{k}:{len(v)}" for k,v in h.get('params_grid', {}).items()])
+                    hist_data.append({
+                        "Timestamp": h.get('timestamp'),
+                        "Results": h.get('total_results', 'N/A'),
+                        "Params Summary": p_summary,
+                        "Blob": h.get('result_blob')
+                    })
+                
+                df_hist = pd.DataFrame(hist_data)
+                
+                event = st.dataframe(
+                    df_hist, 
+                    use_container_width=True, 
+                    selection_mode="single-row",
+                    on_select="rerun",
+                    hide_index=True
+                )
+                
+                if len(event.selection.rows) > 0:
+                    idx = event.selection.rows[0]
+                    selected_run = st.session_state.run_history[idx]
+                    
+                    if st.button(f"📥 Load Run from {selected_run['timestamp']}", type="primary"):
+                        target_blob = selected_run.get('result_blob')
+                        if target_blob:
+                            with st.spinner("Downloading results..."):
+                                local_path = "cloud_results.csv"
+                                success, msg = runner.download_results(gcp_bucket, target_blob, local_path)
+                                if success:
+                                    try:
+                                        df_res = pd.read_csv(local_path)
+                                        st.session_state.gs_results = df_res.sort_values('total_hits', ascending=False).head(50)
+                                        st.success(f"Loaded {len(df_res)} results from {selected_run['timestamp']}")
+                                        st.rerun()
+                                    except Exception as e:
+                                        st.error(f"Failed to parse results: {e}")
+                                else:
+                                    st.error(msg)
+
 
         fixed_params = { 'bump_thresh_type': 'percent', 'slide_thresh_type': 'percent' }
-
-        config_dict = {
-            "params_grid": grid, "fixed_params": fixed_params,
-            "min_bumps": min_bumps_req, "gcs_output_path": f"gs://{gcp_bucket}/results.csv"
-        }
 
         col1, col2 = st.columns(2)
         with col1:
             if st.button("🚀 Start New Cloud Search", type="primary", use_container_width=True):
+                # Generate unique Run ID
+                run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
+                st.session_state.current_cloud_run_id = run_id
+                
+                # Construct paths
+                result_blob = f"results_{run_id}.csv"
+                metadata_blob = f"metadata_{run_id}.json"
+                
+                config_dict = {
+                    "params_grid": grid, 
+                    "fixed_params": fixed_params, 
+                    "min_bumps": min_bumps_req, 
+                    "gcs_output_path": f"gs://{gcp_bucket}/{result_blob}",
+                    "metadata_output_path": f"gs://{gcp_bucket}/{metadata_blob}"
+                }
+                
                 with st.spinner("Triggering..."):
                     success, output = runner.run_job(gcp_job_name, config_dict)
                     if success:
-                        st.session_state.last_loaded_exec_id = None # Force reload on next success
+                        st.session_state.last_loaded_run_id = None # Force reload on next success
                         st.rerun()
                     else:
                         st.error(output)
         with col2:
-            if st.button("📥 Force Download Results", use_container_width=True):
-                with st.spinner("Downloading..."):
+            if st.button("📥 Force Download Latest", use_container_width=True):
+                # Tries to download results from current run ID if set, else generic
+                target = f"results_{st.session_state.current_cloud_run_id}.csv" if st.session_state.get('current_cloud_run_id') else "results.csv"
+                with st.spinner(f"Downloading {target}..."):
                     local_path = "cloud_results.csv"
-                    success, msg = runner.download_results(gcp_bucket, "results.csv", local_path)
+                    success, msg = runner.download_results(gcp_bucket, target, local_path)
                     if success:
                         try:
                             df_res = pd.read_csv(local_path)
@@ -195,7 +292,9 @@ def render_goal_seek(df, cli_args, val_report):
             if cat_status != 'ok':
                 st.info(f"ℹ️ **Local Catalog Status:** {cat_msg}\n\nThis affects local searches only. If you have deployed your cloud job correctly with a catalog, cloud searches will still be optimized.")
             
-            st.code(runner.generate_gcloud_command(gcp_job_name, config_dict, wrap=True), language="bash")
+            # Re-create config for display (without run_id for generic display, or with it? Let's use generic for copy-paste simplicity or latest)
+            # Actually, the user might want to copy-paste to debug.
+            st.code(runner.generate_gcloud_command(gcp_job_name, config_dict if 'config_dict' in locals() else {}, wrap=True), language="bash")
             st.code(runner.get_deploy_instructions(gcp_job_name, "sp500-analyzer"), language="bash")
 
     else:
