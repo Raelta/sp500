@@ -209,9 +209,14 @@ class CatalogSearcher:
             }
             
             completed_count = 0
+            # Report roughly every 10% or at least every item if count is small
+            report_every = max(1, total_structs // 10)
+            
             for future in as_completed(future_to_struct):
                 completed_count += 1
-                if progress_callback and completed_count % 10 == 0:
+                should_report = (completed_count % report_every == 0) or (completed_count == total_structs)
+                
+                if progress_callback and should_report:
                      progress_callback(f"Processed {completed_count}/{total_structs}", completed_count/total_structs)
                 
                 try:
