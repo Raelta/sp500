@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import pandas as pd
 import streamlit as st
 from datetime import time
@@ -389,3 +390,55 @@ gcloud auth application-default login
             
         except Exception as e:
             return self._handle_error(e, f"Logging for {execution_id}")
+
+    def get_latest_progress(self, job_name, execution_id, max_entries=20):
+        """
+        Fetches the latest progress percentage from logs.
+        Returns (percent_float_0_1, message_str)
+        """
+        ok, msg = self.check_credentials()
+        if not ok:
+            return 0.0, "Waiting for credentials..."
+
+        try:
+            # Filter for Cloud Run Job logs specific to this execution ID
+            filter_str = (
+                f'resource.type="cloud_run_job" AND '
+                f'labels."run.googleapis.com/execution_name"="{execution_id}"'
+            )
+            
+            # Fetch most recent logs first
+            entries = self.logging_client.list_entries(
+                filter_=filter_str,
+                order_by=cloud_logging.DESCENDING,
+                page_size=max_entries
+            )
+            
+            # Look for pattern: [10.5%] Some message
+            # The percentage is 0-100 in logs, we want 0.0-1.0 for st.progress
+            progress_pattern = re.compile(r"\[(\d+\.?\d*)%\] (.*)")
+            
+            for entry in entries:
+                payload = entry.payload
+                if isinstance(payload, dict):
+                    msg = payload.get('message', str(payload))
+                else:
+                    msg = str(payload)
+                
+                match = progress_pattern.search(msg)
+                if match:
+                    pct_str = match.group(1)
+                    status_msg = match.group(2)
+                    try:
+                        pct = float(pct_str)
+                        # Clamp between 0 and 100
+                        pct = max(0.0, min(100.0, pct))
+                        return pct / 100.0, status_msg
+                    except ValueError:
+                        continue
+            
+            return 0.0, "Starting..."
+            
+        except Exception:
+            # Fail silently on progress check to not break UI
+            return 0.0, "Initializing..."

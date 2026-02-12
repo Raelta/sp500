@@ -103,6 +103,10 @@ def auto_monitor_job(runner, job_name, bucket):
 
         elif latest_exec['is_running']:
             st.caption("⏳ Job is running. Results will load automatically when finished.")
+            
+            # --- PROGRESS BAR ---
+            pct, p_msg = runner.get_latest_progress(job_name, latest_exec['id'])
+            st.progress(pct, text=f"Progress: {pct*100:.1f}% - {p_msg}")
 
         # Log Viewer for Debugging
         with st.expander("View Cloud Logs", expanded=False):
