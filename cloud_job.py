@@ -31,6 +31,7 @@ def run_job():
     # Params
     data_path = config.get("data_path", "spy_data_25yr.parquet")
     params_grid = config.get("params_grid")
+    fixed_params = config.get("fixed_params")
     
     min_bumps = config.get("min_bumps", 0)
     user_label = config.get("user_label", "unknown")
@@ -64,6 +65,7 @@ def run_job():
     start_time = time.time()
     results = seeker.search(
         params_grid,
+        fixed_params=fixed_params,
         min_bumps=min_bumps,
         progress_callback=progress
     )

@@ -19,15 +19,25 @@ def render_results(results, stats, config, df_filtered, val_report=None):
     layout_order = config['layout_order']
     bump_len = config['bump_len']
     slide_len = config['slide_len']
+    
+    bump_type = config.get('bump_thresh_type', 'percent')
+    slide_type = config.get('slide_thresh_type', 'percent')
+    
+    bump_label = "Bump Change %" if bump_type == 'percent' else "Bump Change"
+    slide_label = "Slide Change %" if slide_type == 'percent' else "Slide Change"
+    
+    bump_suffix = "%" if bump_type == 'percent' else ""
+    slide_suffix = "%" if slide_type == 'percent' else ""
 
     # Display Stats (Hit Rate)
     if stats:
         with st.expander("📊 Pattern Statistics (Hit Rate)", expanded=True):
-            col1, col2, col3, col4 = st.columns(4)
-            col1.metric("Total Bumps", stats['total_bumps'], help="Candidates matching Bump criteria")
-            col2.metric("Total Hits", stats.get('total_hits', stats.get('hits', 0)), help="All overlapping patterns")
-            col3.metric("True Hits", stats.get('true_hits', 0), help="Best unique patterns (overlap removed)")
-            col4.metric("Misses", stats['misses'], help="Bumps NOT followed by matching Slide")
+            col0, col1, col2, col3, col4 = st.columns(5)
+            col0.metric("Total Windows", f"{stats.get('total_rows', 0):,.0f}", help="Total number of analyzed windows/bars")
+            col1.metric("Total Bumps", f"{stats['total_bumps']:,.0f}", help="Candidates matching Bump criteria")
+            col2.metric("Total Hits", f"{stats.get('total_hits', stats.get('hits', 0)):,.0f}", help="All overlapping patterns")
+            col3.metric("True Hits", f"{stats.get('true_hits', 0):,.0f}", help="Best unique patterns (overlap removed)")
+            col4.metric("Misses", f"{stats['misses']:,.0f}", help="Bumps NOT followed by matching Slide")
 
     # Display Results
     if not results.empty:
@@ -60,12 +70,17 @@ def render_results(results, stats, config, df_filtered, val_report=None):
         
         # Define render functions for reordering
         def render_table():
-            st.subheader("Matches")
+            st.subheader("Matches (Top 20 by Slide Magnitude)")
             st.caption("Click a row to visualize it. (Multi-day matches are highlighted)")
             
             # Prepare Highlighted Data
-            # Create a helper column to identify multi-day patterns
             results_display = results.copy()
+            
+            # Sort by best slide change (magnitude) and limit to top 20
+            results_display['abs_slide'] = results_display['slide_change'].abs()
+            results_display = results_display.sort_values('abs_slide', ascending=False).head(20)
+            
+            # Create a helper column to identify multi-day patterns
             results_display['is_multiday'] = results_display['date'].dt.date != results_display['slide_end_date'].dt.date
             
             def highlight_multiday(row):
@@ -73,7 +88,9 @@ def render_results(results, stats, config, df_filtered, val_report=None):
                     return ['background-color: #FFF9C4; color: black'] * len(row) # Light Yellow
                 return [''] * len(row)
             
-            # Apply Style
+            # Apply Style (Remove helper cols from styling if needed, but style applies to whole df)
+            # We must drop helper cols before styling if we don't want them or handle them
+            # But style.apply iterates rows.
             styled_results = results_display.style.apply(highlight_multiday, axis=1)
             
             # Interactive Table
@@ -85,12 +102,13 @@ def render_results(results, stats, config, df_filtered, val_report=None):
                 key="matches_table", # Stable key to preserve sort state across reruns
                 column_config={
                     "date": st.column_config.DatetimeColumn("Bump Start", format="YYYY-MM-DD HH:mm"),
-                    "bump_change": st.column_config.NumberColumn("Bump Change %", format="%.2f"),
-                    "slide_change": st.column_config.NumberColumn("Slide Change %", format="%.2f"),
+                    "bump_change": st.column_config.NumberColumn(bump_label, format="%.2f"),
+                    "slide_change": st.column_config.NumberColumn(slide_label, format="%.2f"),
                     "bump_vol": st.column_config.NumberColumn("Bump Size Vol"),
                     "slide_vol": st.column_config.NumberColumn("Slide Size Vol"),
                     "data_gap": st.column_config.CheckboxColumn("Gap?"),
                     "is_multiday": None, # Hide helper column
+                    "abs_slide": None, # Hide sort column
                 },
                 hide_index=True 
             )
@@ -99,7 +117,8 @@ def render_results(results, stats, config, df_filtered, val_report=None):
             if len(event.selection.rows) > 0:
                 selected_row_numeric_idx = event.selection.rows[0]
                 # Map back to original results index using the same positional index
-                new_idx = results.index[selected_row_numeric_idx]
+                # Use results_display.index because we sorted/filtered
+                new_idx = results_display.index[selected_row_numeric_idx]
                 if 'selected_match_idx' not in st.session_state or new_idx != st.session_state.selected_match_idx:
                     st.session_state.selected_match_idx = new_idx
                     st.rerun()
@@ -130,10 +149,10 @@ def render_results(results, stats, config, df_filtered, val_report=None):
                     st.markdown(f"### {row['date'].date()}")
                 
                 with info_col2:
-                    st.metric("Bump", f"{row['bump_change']:.2f}%")
+                    st.metric("Bump", f"{row['bump_change']:.2f}{bump_suffix}")
                     
                 with info_col3:
-                    st.metric("Slide", f"{row['slide_change']:.2f}%")
+                    st.metric("Slide", f"{row['slide_change']:.2f}{slide_suffix}")
                     
                 with info_col4:
                     # Compact News Controls

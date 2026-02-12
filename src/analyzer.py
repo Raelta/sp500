@@ -171,6 +171,7 @@ def find_bumps_and_slides(
     true_hits = _calculate_true_hits(results, bump_len, slide_len, len(df))
 
     stats = {
+        'total_rows': len(df),
         'total_bumps': int(total_bumps),
         'total_hits': int(total_hits),
         'hits': int(total_hits), # Alias for backward compatibility (Total Hits)

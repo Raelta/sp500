@@ -310,6 +310,22 @@ class CloudRunner:
             print(f"Error reading blob {blob_name}: {e}")
             return None
 
+    def write_json_blob(self, bucket_name, blob_name, data):
+        """
+        Writes a JSON dict/list to GCS.
+        """
+        ok, msg = self.check_credentials()
+        if not ok:
+            return False, msg
+
+        try:
+            bucket = self.storage_client.bucket(bucket_name)
+            blob = bucket.blob(blob_name)
+            blob.upload_from_string(json.dumps(data, cls=CloudEncoder), content_type='application/json')
+            return True, "Success"
+        except Exception as e:
+            return False, self._handle_error(e, f"Writing {blob_name}")
+
     def generate_gcloud_command(self, job_name, config_dict, wrap=False):
         config_json = json.dumps(config_dict, cls=CloudEncoder)
         config_json_escaped = config_json.replace('"', '\\"')

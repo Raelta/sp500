@@ -6,31 +6,21 @@ from datetime import datetime
 from src.search_engine import GoalSeeker
 from src.ui.utils import log_perf
 from src.cloud_runner import CloudRunner
+from src.analyzer import find_bumps_and_slides
+from src.ui.results import render_results
 
-def render_range_input(label, min_val, max_val, default_start, default_end, default_step, key_prefix, compact=False, smart_step=False):
+def render_range_input(label, min_val, max_val, default_start, default_end, default_step, key_prefix, compact=False):
     # Use st.markdown/st.columns to respect current context (expander or sidebar)
     st.markdown(f"**{label}**")
     is_float = isinstance(default_step, float)
     col1, col2, col3 = st.columns(3)
     
     label_visibility = "collapsed" if compact else "visible"
-    
-    def update_step():
-        if not smart_step: return
-        
-        start_key = f"{key_prefix}_start"
-        step_key = f"{key_prefix}_step"
-        
-        if start_key in st.session_state:
-            val = st.session_state[start_key]
-            # 3% rule: step = floor(window * 0.03), min 1
-            new_step = max(1, int(val * 0.03))
-            st.session_state[step_key] = new_step
 
     with col1:
         if compact:
             st.markdown("<div style='font-size:0.8em; margin-bottom:0px; color:#888'>Start</div>", unsafe_allow_html=True)
-        start = st.number_input("Start", min_value=min_val, max_value=max_val, value=default_start, key=f"{key_prefix}_start", label_visibility=label_visibility, on_change=update_step)
+        start = st.number_input("Start", min_value=min_val, max_value=max_val, value=default_start, key=f"{key_prefix}_start", label_visibility=label_visibility)
     with col2:
         if compact:
             st.markdown("<div style='font-size:0.8em; margin-bottom:0px; color:#888'>End</div>", unsafe_allow_html=True)
@@ -68,10 +58,10 @@ def render_goal_seek(df, cli_args, val_report):
         gs_params = {}
         
         # Lengths (Compact Mode)
-        b_len_start, b_len_end, b_len_step = render_range_input("Bump Length (min)", 1, 2880, 3, 6, 1, "gs_b_len", compact=True, smart_step=True)
+        b_len_start, b_len_end, b_len_step = render_range_input("Bump Length (min)", 1, 2880, 3, 6, 1, "gs_b_len", compact=True)
         gs_params['bump_len'] = (b_len_start, b_len_end, b_len_step)
         
-        s_len_start, s_len_end, s_len_step = render_range_input("Slide Length (min)", 1, 2880, 3, 6, 1, "gs_s_len", compact=True, smart_step=True)
+        s_len_start, s_len_end, s_len_step = render_range_input("Slide Length (min)", 1, 2880, 3, 6, 1, "gs_s_len", compact=True)
         gs_params['slide_len'] = (s_len_start, s_len_end, s_len_step)
         
         st.markdown("---")
@@ -126,6 +116,16 @@ def render_goal_seek(df, cli_args, val_report):
     
     fixed_params = { 'bump_thresh_type': 'percent', 'slide_thresh_type': 'percent' }
 
+    # Calculate and display estimate
+    total_configs = 1
+    for k, v in grid.items():
+        total_configs *= len(v)
+    
+    est_time_mins = (total_configs / 1000) * 6
+    
+    st.info(f"**Estimated Workload:** {total_configs:,} configurations.  \n"
+            f"**Rough Time Estimate:** ~{est_time_mins:.1f} minutes (based on 6 mins/1000 configs).")
+
     if run_cloud:
         runner = CloudRunner(project_id=gcp_project, region=gcp_region)
         
@@ -157,11 +157,30 @@ def render_goal_seek(df, cli_args, val_report):
                     success, output = runner.run_job(gcp_job_name, config_dict)
                     if success:
                         st.success(f"Job Queued! Run ID: {run_id}")
+                        
+                        # Log submission
+                        try:
+                            hist_blob = "submission_history.json"
+                            history = runner.read_json_blob(gcp_bucket, hist_blob) or []
+                            history.append({
+                                "run_id": run_id,
+                                "timestamp": datetime.now().isoformat(),
+                                "user_label": safe_label,
+                                "total_configs": total_configs,
+                                "est_time_mins": est_time_mins
+                            })
+                            # Keep last 100
+                            if len(history) > 100: history = history[-100:]
+                            runner.write_json_blob(gcp_bucket, hist_blob, history)
+                        except Exception as e:
+                            print(f"Failed to log submission: {e}")
+
                     else:
                         st.error(output)
 
         with col2:
             if st.button("🔄 Refresh Status", use_container_width=True):
+                 # 1. Update Current Job Status
                  latest_exec, error_msg = runner.get_latest_execution(gcp_job_name)
                  if error_msg:
                      st.error(f"Status check failed: {error_msg}")
@@ -174,6 +193,80 @@ def render_goal_seek(df, cli_args, val_report):
                      if latest_exec.get('is_running'):
                          pct, p_msg = runner.get_latest_progress(gcp_job_name, latest_exec['id'])
                          st.progress(pct, text=f"{pct*100:.1f}% - {p_msg}")
+                     
+                     # Auto-download results if SUCCEEDED
+                     if status == "SUCCEEDED":
+                        target = None
+                        if st.session_state.get('current_cloud_run_id'):
+                             safe_label = "".join([c for c in gcp_user_label if c.isalnum() or c in ('-', '_')]).strip()
+                             if not safe_label: safe_label = "user"
+                             target = f"results_{safe_label}_{st.session_state.current_cloud_run_id}.csv"
+                        else:
+                            target = "results.csv" # Fallback if no specific run ID known
+                        
+                        with st.spinner(f"Run Complete! Downloading {target}..."):
+                            local_path = "cloud_results.csv"
+                            success, msg = runner.download_results(gcp_bucket, target, local_path)
+                            if success:
+                                try:
+                                    df_res = pd.read_csv(local_path)
+                                    st.session_state.gs_results = df_res
+                                    st.success(f"Downloaded {len(df_res)} results.")
+                                    # We do NOT rerun here immediately, so we can update history first
+                                except Exception as e:
+                                    st.error(f"Failed to parse CSV: {e}")
+                            else:
+                                st.warning(f"Could not download results: {msg}")
+
+                 # 2. Update History
+                 with st.spinner("Fetching run history..."):
+                     # Fetch submission history
+                     sub_hist = runner.read_json_blob(gcp_bucket, "submission_history.json") or []
+                     sub_map = {item['run_id']: item for item in sub_hist}
+
+                     # Fetch metadata blobs (Completed jobs)
+                     blobs = runner.list_blobs(gcp_bucket, prefix="metadata_")
+                     
+                     combined_history = []
+                     seen_run_ids = set()
+
+                     # Process Completed Jobs
+                     for blob_name in blobs[:50]:
+                         meta = runner.read_json_blob(gcp_bucket, blob_name)
+                         if meta:
+                             run_id = meta.get('run_id')
+                             if not run_id:
+                                 # Try to extract from blob name: metadata_{safe_label}_{run_id}.json
+                                 parts = blob_name.replace("metadata_", "").replace(".json", "").split("_")
+                                 if len(parts) >= 2:
+                                     run_id = "_".join(parts[-2:])
+                             
+                             if run_id:
+                                seen_run_ids.add(run_id)
+                                # Merge with submission info if available
+                                if run_id in sub_map:
+                                    sub = sub_map[run_id]
+                                    meta['est_time_mins'] = sub.get('est_time_mins')
+                                    meta['total_configs'] = sub.get('total_configs')
+                             
+                             meta['status'] = 'COMPLETED'
+                             # Derive result blob name from metadata blob name
+                             # metadata_user_2026...json -> results_user_2026...csv
+                             result_blob_name = blob_name.replace("metadata_", "results_", 1).replace(".json", ".csv")
+                             meta['result_blob'] = result_blob_name
+                             combined_history.append(meta)
+
+                     # Add Submitted (but not yet completed/metadata-ed) jobs
+                     for item in sub_hist:
+                         if item['run_id'] not in seen_run_ids:
+                             item['status'] = 'SUBMITTED'
+                             item['total_results'] = '-' # Placeholder
+                             item['duration_sec'] = 0
+                             combined_history.append(item)
+                     
+                     # Sort by timestamp desc
+                     combined_history.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
+                     st.session_state.run_history = combined_history
 
         with col3:
             if st.button("📥 Download & Summarize", use_container_width=True):
@@ -198,6 +291,93 @@ def render_goal_seek(df, cli_args, val_report):
                             st.error(f"Failed to parse CSV: {e}")
                     else:
                         st.error(msg)
+
+        # --- RUN HISTORY ---
+        st.divider()
+        with st.expander("📂 Cloud Run History", expanded=False):
+             if 'run_history' in st.session_state and st.session_state.run_history:
+                 # Display Table
+                 hist_data = []
+                 now = datetime.now()
+                 for h in st.session_state.run_history:
+                     # Format timestamp nicely
+                     ts_str = h.get('timestamp', '')
+                     ts_dt = None
+                     try:
+                         ts_dt = datetime.fromisoformat(ts_str)
+                         ts_fmt = ts_dt.strftime("%Y-%m-%d %H:%M")
+                     except:
+                         ts_fmt = ts_str
+                     
+                     # Time Since
+                     time_since = ""
+                     if ts_dt:
+                         diff = now - ts_dt
+                         mins = int(diff.total_seconds() / 60)
+                         if mins < 60:
+                             time_since = f"{mins}m ago"
+                         else:
+                             hours = int(mins / 60)
+                             rem_mins = mins % 60
+                             time_since = f"{hours}h {rem_mins}m ago"
+
+                     # Est Duration
+                     est_dur = h.get('est_time_mins')
+                     est_str = f"~{est_dur:.1f}m" if est_dur else "-"
+                     
+                     # Actual Duration
+                     dur_sec = h.get('duration_sec', 0)
+                     act_str = f"{dur_sec:.1f}s" if dur_sec > 0 else "-"
+
+                     hist_data.append({
+                         "Run Time": ts_fmt,
+                         "Time Since": time_since,
+                         "User": h.get('user_label', 'Unknown'),
+                         "Status": h.get('status', 'UNKNOWN'),
+                         "Est. Time": est_str,
+                         "Actual Time": act_str,
+                         "Configs": str(h.get('total_configs', '-')),
+                         "Results": str(h.get('total_results', 'N/A')),
+                         "_blob": h.get('result_blob') # Hidden column
+                     })
+                 
+                 df_hist = pd.DataFrame(hist_data)
+                 
+                 st.caption("Select a run to load its results.")
+                 event = st.dataframe(
+                     df_hist,
+                     column_config={
+                        "_blob": None # Hide blob name
+                     },
+                     use_container_width=True,
+                     on_select="rerun",
+                     selection_mode="single-row",
+                     hide_index=True
+                 )
+                 
+                 if len(event.selection.rows) > 0:
+                     idx = event.selection.rows[0]
+                     selected_run = df_hist.iloc[idx]
+                     blob_name = selected_run['_blob']
+                     
+                     # Check if we need to load (avoid reload loop)
+                     if not blob_name or pd.isna(blob_name):
+                         st.warning("This job is submitted but results are not yet available (or it failed).")
+                     elif st.session_state.get('last_loaded_blob') != blob_name:
+                         with st.spinner(f"Loading results from {selected_run['Run Time']}..."):
+                             local_path = "cloud_results.csv"
+                             success, msg = runner.download_results(gcp_bucket, blob_name, local_path)
+                             if success:
+                                 try:
+                                     df_res = pd.read_csv(local_path)
+                                     st.session_state.gs_results = df_res
+                                     st.session_state.last_loaded_blob = blob_name
+                                     st.success(f"Loaded {len(df_res)} results.")
+                                     st.rerun()
+                                 except Exception as e:
+                                     st.error(f"Failed to parse CSV: {e}")
+                             else:
+                                 st.error(msg)
                         
     else:
         # Local Mode
@@ -227,18 +407,43 @@ def render_goal_seek(df, cli_args, val_report):
         df_res = st.session_state.gs_results
         
         if not df_res.empty:
-            total_hits = df_res['total_hits'].sum()
-            true_hits = df_res['true_hits'].sum() if 'true_hits' in df_res.columns else 0
-            matches = len(df_res)
-            hit_percentage = (total_hits / matches) if matches > 0 else 0
+            # Calculate Confidence
+            if 'total_hits' in df_res.columns and 'total_bumps' in df_res.columns:
+                 df_res['confidence'] = df_res.apply(
+                     lambda x: (x['total_hits'] / x['total_bumps'] * 100) if x['total_bumps'] > 0 else 0, axis=1
+                 )
             
-            col_s1, col_s2, col_s3, col_s4 = st.columns(4)
-            col_s1.metric("Matches", f"{matches:,.0f}")
-            col_s2.metric("Total Hits", f"{total_hits:,.0f}")
-            col_s3.metric("True Hits", f"{true_hits:,.0f}")
-            col_s4.metric("Hit Percentage", f"{hit_percentage:.2f}")
+            # Sort by Confidence (or total_hits as fallback)
+            if 'confidence' in df_res.columns:
+                 df_res = df_res.sort_values('confidence', ascending=False)
+                 # Reorder columns to put confidence first
+                 cols = ['confidence'] + [c for c in df_res.columns if c != 'confidence']
+                 df_res = df_res[cols]
+            else:
+                 df_res = df_res.sort_values('total_hits', ascending=False)
+
+            # Metrics based on Best Result
+            best_row = df_res.iloc[0]
+            num_configs = len(df_res)
+            best_bumps = best_row.get('total_bumps', 0)
+            best_hits = best_row.get('total_hits', 0)
+            best_conf = best_row.get('confidence', 0)
+            best_scope_rows = best_row.get('scope_rows', 0)
             
-            st.dataframe(df_res, use_container_width=True)
+            col_s1, col_s2, col_s3, col_s4, col_s5 = st.columns(5)
+            col_s1.metric("Configurations", f"{num_configs:,.0f}")
+            col_s2.metric("Total Windows", f"{best_scope_rows:,.0f}", help="Total analyzed windows in the best configuration")
+            col_s3.metric("Total Bumps (Best)", f"{best_bumps:,.0f}")
+            col_s4.metric("Total Hits (Best)", f"{best_hits:,.0f}")
+            col_s5.metric("Confidence (Best)", f"{best_conf:.2f}%")
+            
+            # Interactive Table
+            event = st.dataframe(
+                df_res, 
+                use_container_width=True,
+                on_select="rerun",
+                selection_mode="single-row"
+            )
             
             # Download Button for CSV
             csv = df_res.to_csv(index=False).encode('utf-8')
@@ -248,5 +453,59 @@ def render_goal_seek(df, cli_args, val_report):
                 file_name="goal_seek_results.csv",
                 mime="text/csv",
             )
+            
+            # --- Visualization Logic ---
+            if len(event.selection.rows) > 0:
+                selected_row_idx = event.selection.rows[0]
+                row_data = df_res.iloc[selected_row_idx]
+                
+                st.divider()
+                st.subheader(f"Detailed Analysis (Row {selected_row_idx})")
+                
+                # 1. Extract Params
+                try:
+                    # Construct config dict for find_bumps_and_slides
+                    viz_config = {
+                        'bump_len': int(row_data['bump_len']),
+                        'bump_threshold': float(row_data['bump_threshold']),
+                        'bump_thresh_type': str(row_data.get('bump_thresh_type', 'percent')),
+                        'slide_len': int(row_data['slide_len']),
+                        'slide_threshold': float(row_data['slide_threshold']),
+                        'slide_thresh_type': str(row_data.get('slide_thresh_type', 'percent')),
+                        'min_bump_vol': int(row_data.get('min_bump_vol', 0)),
+                        'min_slide_vol': int(row_data.get('min_slide_vol', 0)),
+                        'bump_up_pct': float(row_data.get('bump_up_pct', 0.0)),
+                        'slide_up_pct': float(row_data.get('slide_up_pct', 0.0)),
+                        'time_range': None, # Default full day
+                        'days_of_week': None, # Default all days
+                        'layout_order': "Table Top", # Default layout
+                        # Pass through scalar values for potential plotting needs
+                        'selected_years': sorted(df['date'].dt.year.unique()), # All years
+                        'all_years': sorted(df['date'].dt.year.unique())
+                    }
+                    
+                    with st.expander("Analysis Configuration", expanded=False):
+                        st.json({k: v for k, v in viz_config.items() if k not in ['selected_years', 'all_years']})
+                    
+                    with st.spinner("Finding matches for visualization..."):
+                        # Run Analysis Locally for this specific config
+                        results, stats = find_bumps_and_slides(
+                            df,
+                            viz_config['bump_len'], viz_config['bump_threshold'], viz_config['bump_thresh_type'],
+                            viz_config['slide_len'], viz_config['slide_threshold'], viz_config['slide_thresh_type'],
+                            min_bump_vol=viz_config['min_bump_vol'],
+                            min_slide_vol=viz_config['min_slide_vol'],
+                            bump_up_pct=viz_config['bump_up_pct'],
+                            slide_up_pct=viz_config['slide_up_pct']
+                        )
+                        
+                        if not results.empty:
+                            render_results(results, stats, viz_config, df, val_report)
+                        else:
+                            st.warning("No matches found when re-running with these parameters locally. (Data mismatch?)")
+                            
+                except Exception as e:
+                    st.error(f"Error preparing visualization: {str(e)}")
+            
         else:
             st.info("No matches in result set.")
