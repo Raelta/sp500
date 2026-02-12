@@ -31,7 +31,7 @@ def render_sidebar(df, cli_args):
     """
     
     # Global Controls
-    if st.sidebar.button("🔄 Reload Data", help="Clear cache and force reload from disk"):
+    if st.sidebar.button("🔄 Reload Data", help="Clear cache and force reload from disk", use_container_width=True):
         st.cache_data.clear()
         for key in ['results', 'selected_match_idx', 'preselected_done', 'stats', 'applied_config']:
             if key in st.session_state:
@@ -46,71 +46,95 @@ def render_sidebar(df, cli_args):
     # BUMP TYPE
     bt_default = applied.get('bump_thresh_type', 'percent')
     bt_idx = 0 if bt_default == "percent" else 1
-    bump_thresh_type = st.sidebar.radio("Bump Threshold Type", ["percent", "value"], index=bt_idx, key="sb_bump_type")
-
+    
     # SLIDE TYPE
     st_default = applied.get('slide_thresh_type', 'percent')
     st_idx = 0 if st_default == "percent" else 1
-    slide_thresh_type = st.sidebar.radio("Slide Threshold Type", ["percent", "value"], index=st_idx, key="sb_slide_type")
+
+    # Combined Type Selection
+    col_t1, col_t2 = st.sidebar.columns(2)
+    with col_t1:
+        bump_thresh_type = st.radio("Bump Type", ["percent", "value"], index=bt_idx, key="sb_bump_type", horizontal=True)
+    with col_t2:
+        slide_thresh_type = st.radio("Slide Type", ["percent", "value"], index=st_idx, key="sb_slide_type", horizontal=True)
 
     # Defaults for thresholds
     if bump_thresh_type == "percent":
         b_val, b_step = applied.get('bump_threshold', 0.34), 0.01
-        b_label = "Bump Threshold (%)"
+        b_label = "Bump Thresh (%)"
     else:
         b_val, b_step = applied.get('bump_threshold', 0.50), 0.05
-        b_label = "Bump Threshold (Price Difference)"
+        b_label = "Bump Thresh (Diff)"
 
     if slide_thresh_type == "percent":
         s_val, s_step = applied.get('slide_threshold', 0.34), 0.01
-        s_label = "Slide Threshold (%)"
+        s_label = "Slide Thresh (%)"
     else:
         s_val, s_step = applied.get('slide_threshold', 0.50), 0.05
-        s_label = "Slide Threshold (Price Difference)"
+        s_label = "Slide Thresh (Diff)"
 
-    st.sidebar.header("Bump Parameters")
+    # --- BUMP PARAMETERS ---
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Bump Parameters")
     b_len_default = applied.get('bump_len', cli_args.bump_len if cli_args.bump_len is not None else 5)
     bump_len = render_time_input("Bump Size", b_len_default, "sb_bump_size")
     
-    bump_threshold = st.sidebar.number_input(b_label, min_value=0.0, value=float(b_val), step=b_step, format="%.2f", key=f"sb_bump_th_{bump_thresh_type}")
-    
-    b_up_default = applied.get('bump_up_pct', cli_args.bump_up_pct if cli_args.bump_up_pct is not None else 0.0)
-    bump_up_pct = st.sidebar.slider("Min % Up Candles", 0.0, 100.0, float(b_up_default), step=5.0, key="sb_bump_up_pct")
+    col_b1, col_b2 = st.sidebar.columns(2)
+    with col_b1:
+        bump_threshold = st.number_input(b_label, min_value=0.0, value=float(b_val), step=b_step, format="%.2f", key=f"sb_bump_th_{bump_thresh_type}")
+    with col_b2:
+        b_up_default = applied.get('bump_up_pct', cli_args.bump_up_pct if cli_args.bump_up_pct is not None else 0.0)
+        bump_up_pct = st.number_input("Min % Up", min_value=0.0, max_value=100.0, value=float(b_up_default), step=5.0, key="sb_bump_up_pct")
 
-    st.sidebar.header("Slide Parameters")
+    # --- SLIDE PARAMETERS ---
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Slide Parameters")
     s_len_default = applied.get('slide_len', cli_args.slide_len if cli_args.slide_len is not None else 3)
     slide_len = render_time_input("Slide Size", s_len_default, "sb_slide_size")
     
-    slide_threshold = st.sidebar.number_input(s_label, min_value=0.0, value=float(s_val), step=s_step, format="%.2f", key=f"sb_slide_th_{slide_thresh_type}")
-    
-    s_up_default = applied.get('slide_up_pct', cli_args.slide_up_pct if cli_args.slide_up_pct is not None else 0.0)
-    slide_up_pct = st.sidebar.slider("Min % Up Candles", 0.0, 100.0, float(s_up_default), step=5.0, key="sb_slide_up_pct")
+    col_s1, col_s2 = st.sidebar.columns(2)
+    with col_s1:
+        slide_threshold = st.number_input(s_label, min_value=0.0, value=float(s_val), step=s_step, format="%.2f", key=f"sb_slide_th_{slide_thresh_type}")
+    with col_s2:
+        s_up_default = applied.get('slide_up_pct', cli_args.slide_up_pct if cli_args.slide_up_pct is not None else 0.0)
+        slide_up_pct = st.number_input("Min % Up", min_value=0.0, max_value=100.0, value=float(s_up_default), step=5.0, key="sb_slide_up_pct")
 
-    st.sidebar.header("Filters")
+    # --- FILTERS ---
+    st.sidebar.markdown("---")
+    st.sidebar.subheader("Filters")
     mbv_default = applied.get('min_bump_vol', cli_args.min_bump_vol if cli_args.min_bump_vol is not None else 0)
     msv_default = applied.get('min_slide_vol', cli_args.min_slide_vol if cli_args.min_slide_vol is not None else 0)
 
-    min_bump_vol = st.sidebar.number_input("Min Bump Size Vol", min_value=0, value=int(mbv_default), step=1000, key="sb_min_bump_vol")
-    min_slide_vol = st.sidebar.number_input("Min Slide Size Vol", min_value=0, value=int(msv_default), step=1000, key="sb_min_slide_vol")
+    col_v1, col_v2 = st.sidebar.columns(2)
+    with col_v1:
+        min_bump_vol = st.number_input("Min Bump Vol", min_value=0, value=int(mbv_default), step=1000, key="sb_min_bump_vol")
+    with col_v2:
+        min_slide_vol = st.number_input("Min Slide Vol", min_value=0, value=int(msv_default), step=1000, key="sb_min_slide_vol")
 
-    st.sidebar.subheader("Time of Day (Bump Start)")
+    # --- TIME OF DAY ---
+    st.sidebar.subheader("Time of Day")
     tr_default = applied.get('time_range', (time(9, 30), time(16, 0)))
-    time_start = st.sidebar.time_input("Start Time", tr_default[0], key="sb_time_start")
-    time_end = st.sidebar.time_input("End Time", tr_default[1], key="sb_time_end")
+    
+    col_tm1, col_tm2 = st.sidebar.columns(2)
+    with col_tm1:
+        time_start = st.time_input("Start", tr_default[0], key="sb_time_start")
+    with col_tm2:
+        time_end = st.time_input("End", tr_default[1], key="sb_time_end")
 
+    # --- DATE FILTERS ---
     st.sidebar.subheader("Date Filters")
     all_years = sorted(df['date'].dt.year.unique())
-    with st.sidebar:
-        # Years
-        sy_default = applied.get('selected_years', all_years)
-        # Note: render_checkbox_dropdown might need to support default values
-        selected_years = render_checkbox_dropdown("Years", all_years, "filter_year")
-        
-        # Days
-        days_options = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
-        days = render_checkbox_dropdown("Days of Week", days_options, "filter_day")
+    
+    # Years
+    sy_default = applied.get('selected_years', all_years)
+    selected_years = render_checkbox_dropdown("Years", all_years, "filter_year")
+    
+    # Days
+    days_options = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+    days = render_checkbox_dropdown("Days of Week", days_options, "filter_day")
 
-    st.sidebar.subheader("App Layout")
+    st.sidebar.markdown("---")
+    # --- APP LAYOUT ---
     lo_default = applied.get('layout_order', "Table Top")
     lo_idx = 0 if lo_default == "Table Top" else 1
     layout_order = st.sidebar.radio("View Order", ["Table Top", "Chart Top"], index=lo_idx, horizontal=True, key="sb_layout_order")

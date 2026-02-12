@@ -86,3 +86,82 @@ def log_perf(label, start_time):
         st.session_state.perf_logs = []
     st.session_state.perf_logs.append(msg)
     return time_module.time() # Return new start time
+
+def inject_compact_sidebar_style():
+    """
+    Injects CSS to make the sidebar more compact.
+    """
+    st.markdown(
+        """
+        <style>
+        /* Compact Sidebar Container */
+        section[data-testid="stSidebar"] .block-container {
+            padding-top: 1rem;
+            padding-bottom: 2rem;
+        }
+        
+        /* Reduce vertical spacing between widgets */
+        section[data-testid="stSidebar"] .stElementContainer {
+            margin-bottom: 0.25rem !important;
+        }
+        
+        /* Compact Headings */
+        section[data-testid="stSidebar"] h1, 
+        section[data-testid="stSidebar"] h2, 
+        section[data-testid="stSidebar"] h3 {
+            margin-top: 0.5rem !important;
+            margin-bottom: 0.25rem !important;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            font-size: 1rem !important;
+        }
+        
+        /* Compact Labels */
+        section[data-testid="stSidebar"] label {
+            margin-bottom: 0.0rem !important;
+            font-size: 0.8rem !important;
+        }
+
+        /* Compact Inputs */
+        section[data-testid="stSidebar"] input {
+            padding-top: 0.25rem !important;
+            padding-bottom: 0.25rem !important;
+            min-height: 0px !important;
+            height: auto !important;
+            font-size: 0.8rem !important;
+        }
+        
+        /* Compact Selectbox/NumberInput containers */
+        section[data-testid="stSidebar"] [data-baseweb="select"] > div {
+            min-height: 28px !important;
+            padding-top: 0px !important;
+            padding-bottom: 0px !important;
+        }
+        
+        /* Compact Number Input Buttons */
+        section[data-testid="stSidebar"] button[kind="secondary"] {
+            padding-top: 0px !important;
+            padding-bottom: 0px !important;
+            height: 28px !important;
+            min-height: 28px !important;
+        }
+
+        /* Reduce vertical gap in columns */
+        section[data-testid="stSidebar"] [data-testid="stVerticalBlock"] > div {
+            gap: 0.25rem !important;
+        }
+        
+        /* Divider spacing */
+        section[data-testid="stSidebar"] hr {
+            margin-top: 0.5rem !important;
+            margin-bottom: 0.5rem !important;
+        }
+        
+        /* Radio button spacing */
+        section[data-testid="stSidebar"] .stRadio > div {
+            margin-top: -10px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )

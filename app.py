@@ -4,12 +4,13 @@ import time as time_module
 from src.data_loader import load_data_cached
 from src.data_validator import validate_dataset, get_yearly_duplicate_summary
 from src.config import get_cli_args
-from src.ui.utils import log_perf
+from src.ui.utils import log_perf, inject_compact_sidebar_style
 from src.ui.exploration import render_exploration
 from src.ui.goal_seek import render_goal_seek
 
 # Setup
 st.set_page_config(page_title="SP500 Bump & Slide", layout="wide")
+inject_compact_sidebar_style()
 st.title("SP500 Bump & Slide Analysis")
 
 # Initialize Session State

@@ -27,6 +27,7 @@ def run_job():
     params_grid = config.get("params_grid")
     
     min_bumps = config.get("min_bumps", 0)
+    user_label = config.get("user_label", "unknown")
     output_path = config.get("output_path", "/tmp/results.csv")
     
     # --- SEARCH ENGINE SELECTION ---
@@ -109,6 +110,7 @@ def run_job():
                         
                     metadata = {
                         "timestamp": datetime.now().isoformat(),
+                        "user_label": user_label,
                         "params_grid": params_grid,
                         "min_bumps": min_bumps,
                         "result_blob": blob_name,

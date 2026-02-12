@@ -205,7 +205,8 @@ class CloudRunner:
 
     def run_job(self, job_name, config_dict):
         """
-        Triggers a Cloud Run Job by updating its environment variables and then executing it.
+        Triggers a Cloud Run Job using execution overrides.
+        This enables concurrent runs with different configurations without modifying the base job.
         """
         st.info(f"Initiating cloud job: {job_name}...")
         
@@ -219,31 +220,33 @@ class CloudRunner:
         job_path = f"{parent}/jobs/{job_name}"
         
         try:
-            st.write(f"Step 1: Fetching job configuration for {job_name}...")
-            job = self.run_client.get_job(name=job_path)
+            st.write(f"Step 1: Preparing execution overrides for {job_name}...")
             
-            env_vars = job.template.template.containers[0].env
+            # Use overrides to pass config specifically for this execution
+            # This allows multiple users/tabs to run jobs concurrently without interference
+            env_var = run_v2.EnvVar(name="GOAL_SEEK_CONFIG", value=f"^~^{config_json}")
             
-            found = False
-            for env in env_vars:
-                if env.name == "GOAL_SEEK_CONFIG":
-                    env.value = f"^~^{config_json}"
-                    found = True
-                    break
+            container_override = run_v2.RunJobRequest.Overrides.ContainerOverride(
+                env=[env_var]
+            )
             
-            if not found:
-                env_vars.append(run_v2.EnvVar(name="GOAL_SEEK_CONFIG", value=f"^~^{config_json}"))
+            overrides = run_v2.RunJobRequest.Overrides(
+                container_overrides=[container_override]
+            )
             
-            st.write("Step 2: Updating job with new parameters...")
-            update_operation = self.run_client.update_job(job=job)
-            update_operation.result() 
+            request = run_v2.RunJobRequest(
+                name=job_path,
+                overrides=overrides
+            )
             
-            st.write("Step 3: Triggering execution...")
-            run_operation = self.run_client.run_job(name=job_path)
-            # Fetch the execution name from response if possible
+            st.write("Step 2: Triggering execution...")
+            operation = self.run_client.run_job(request=request)
             
-            st.success(f"Execution started successfully.")
-            return True, f"Job {job_name} triggered successfully."
+            # operation is a Long-Running Operation (LRO). 
+            # We don't wait for completion, just submission.
+            
+            st.success(f"Execution submitted successfully.")
+            return True, f"Job {job_name} submitted to queue."
             
         except Exception as e:
             friendly_msg = self._handle_error(e, job_path)

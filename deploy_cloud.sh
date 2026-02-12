@@ -18,19 +18,11 @@ echo "Image:   $IMAGE_URI"
 echo "Bucket:  $BUCKET_NAME"
 echo "========================================================"
 
-# 1. Sync Catalog to GCS (Only uploads changes)
-echo ""
-echo "📤 Step 1: Syncing Catalog to GCS..."
-echo "--------------------------------------------------------"
-if [ -d "catalog" ]; then
-    gcloud storage rsync -r catalog/ gs://$BUCKET_NAME/catalog/
-else
-    echo "⚠️ Local catalog directory not found. Skipping sync."
-fi
+# Note: Catalog update is now handled by update_catalog.sh
 
-# 2. Build the Docker Image (using Cloud Build)
+# 1. Build the Docker Image (using Cloud Build)
 echo ""
-echo "📦 Step 2: Building Docker Image with Cloud Build..."
+echo "📦 Step 1: Building Docker Image with Cloud Build..."
 echo "--------------------------------------------------------"
 # We specifically use '.' to include the current directory context
 # The .gcloudignore file ensures 'catalog/' is EXCLUDED to speed up build
@@ -43,9 +35,9 @@ fi
 
 echo "✅ Build successful!"
 
-# 3. Update the Cloud Run Job
+# 2. Update the Cloud Run Job
 echo ""
-echo "🔄 Step 3: Updating Cloud Run Job..."
+echo "🔄 Step 2: Updating Cloud Run Job..."
 echo "--------------------------------------------------------"
 
 # Check if job exists first
@@ -84,6 +76,7 @@ if [ $? -ne 0 ]; then
 fi
 
 echo ""
-echo "🎉 Success! The job has been updated with the new image (including the catalog)."
+echo "🎉 Success! The job has been updated with the new image."
+echo "   Note: If you need to update the catalog, run ./update_catalog.sh"
 echo "   You can now trigger searches from the Streamlit UI."
 echo ""

@@ -118,34 +118,52 @@ def auto_monitor_job(runner, job_name, bucket):
 
 def render_goal_seek(df, cli_args, val_report):
     # --- SIDEBAR INPUTS ---
-    st.sidebar.title("Goal Seek Parameters")
+    st.sidebar.header("Goal Seek Parameters")
     gs_params = {}
+    
+    # Lengths
     b_len_start, b_len_end, b_len_step = render_range_input("Bump Length (min)", 1, 2880, 3, 6, 1, "gs_b_len")
     gs_params['bump_len'] = (b_len_start, b_len_end, b_len_step)
+    
     s_len_start, s_len_end, s_len_step = render_range_input("Slide Length (min)", 1, 2880, 3, 6, 1, "gs_s_len")
     gs_params['slide_len'] = (s_len_start, s_len_end, s_len_step)
     
-    st.sidebar.divider()
-    min_b_thresh = st.sidebar.number_input("Min Bump Threshold %", value=3.0, step=0.1, key="gs_min_b_thresh")
-    min_s_thresh = st.sidebar.number_input("Min Slide Threshold %", value=3.0, step=0.1, key="gs_min_s_thresh")
+    st.sidebar.markdown("---")
     
-    st.sidebar.divider()
+    # Thresholds (Side by side)
+    col_th1, col_th2 = st.sidebar.columns(2)
+    with col_th1:
+        min_b_thresh = st.number_input("Min Bump Thresh %", value=3.0, step=0.1, key="gs_min_b_thresh")
+    with col_th2:
+        min_s_thresh = st.number_input("Min Slide Thresh %", value=3.0, step=0.1, key="gs_min_s_thresh")
+    
+    st.sidebar.markdown("---")
+    
+    # Volumes
     b_vol_start, b_vol_end, b_vol_step = render_range_input("Min Bump Volume", 0, 10000000, 0, 0, 10000, "gs_b_vol")
     gs_params['min_bump_vol'] = (b_vol_start, b_vol_end, b_vol_step)
+    
     s_vol_start, s_vol_end, s_vol_step = render_range_input("Min Slide Volume", 0, 10000000, 0, 0, 10000, "gs_s_vol")
     gs_params['min_slide_vol'] = (s_vol_start, s_vol_end, s_vol_step)
     
-    st.sidebar.divider()
+    st.sidebar.markdown("---")
+    
+    # Percentages
     b_up_start, b_up_end, b_up_step = render_range_input("Bump Up %", 0, 100, 0, 0, 5, "gs_b_up")
     gs_params['bump_up_pct'] = (b_up_start, b_up_end, b_up_step)
+    
     s_up_start, s_up_end, s_up_step = render_range_input("Slide Up %", 0, 100, 0, 0, 5, "gs_s_up")
     gs_params['slide_up_pct'] = (s_up_start, s_up_end, s_up_step)
     
-    st.sidebar.divider()
-    min_bumps_req = st.sidebar.number_input("Min Bumps Required", value=0, step=1)
+    st.sidebar.markdown("---")
     
-    st.sidebar.divider()
-    run_cloud = st.sidebar.checkbox("☁️ Offload to Cloud (GCP)", value=True)
+    # Execution
+    col_req1, col_req2 = st.sidebar.columns(2)
+    with col_req1:
+        min_bumps_req = st.number_input("Min Bumps Req", value=0, step=1)
+    with col_req2:
+        st.write("") # Spacer for vertical alignment if needed, or just let checkbox sit
+        run_cloud = st.checkbox("☁️ Cloud Run", value=True)
     
     if run_cloud:
         with st.sidebar.expander("🛠️ GCP Configuration", expanded=False):
@@ -153,6 +171,7 @@ def render_goal_seek(df, cli_args, val_report):
             gcp_region = st.text_input("Region", value="europe-west2", key="gs_gcp_region")
             gcp_job_name = st.text_input("Job Name", value="sp500-goal-seek", key="gs_gcp_job_name")
             gcp_bucket = st.text_input("GCS Bucket", value="sp500-goal-seek-results", key="gs_gcp_bucket")
+            gcp_user_label = st.text_input("User / Run Label", value="user", key="gs_gcp_user_label", help="Identifier for who is running this job. Used in filenames.")
 
     # Catalog Check
     from src.catalog import check_catalog_status
@@ -240,6 +259,7 @@ def render_goal_seek(df, cli_args, val_report):
                     p_summary = ", ".join([f"{k}:{len(v)}" for k,v in h.get('params_grid', {}).items()])
                     hist_data.append({
                         "Timestamp": h.get('timestamp'),
+                        "User": h.get('user_label', 'Unknown'),
                         "Results": h.get('total_results', 'N/A'),
                         "Params Summary": p_summary,
                         "Blob": h.get('result_blob')
@@ -286,19 +306,24 @@ def render_goal_seek(df, cli_args, val_report):
                 run_id = datetime.now().strftime("%Y%m%d_%H%M%S")
                 st.session_state.current_cloud_run_id = run_id
                 
-                # Construct paths
-                result_blob = f"results_{run_id}.csv"
-                metadata_blob = f"metadata_{run_id}.json"
+                # Construct paths with user label
+                # Sanitize user label
+                safe_label = "".join([c for c in gcp_user_label if c.isalnum() or c in ('-', '_')]).strip()
+                if not safe_label: safe_label = "user"
+                
+                result_blob = f"results_{safe_label}_{run_id}.csv"
+                metadata_blob = f"metadata_{safe_label}_{run_id}.json"
                 
                 config_dict = {
                     "params_grid": grid, 
                     "fixed_params": fixed_params, 
-                    "min_bumps": min_bumps_req, 
+                    "min_bumps": min_bumps_req,
+                    "user_label": safe_label,
                     "gcs_output_path": f"gs://{gcp_bucket}/{result_blob}",
                     "metadata_output_path": f"gs://{gcp_bucket}/{metadata_blob}"
                 }
                 
-                with st.spinner("Triggering..."):
+                with st.spinner("Queueing Job..."):
                     success, output = runner.run_job(gcp_job_name, config_dict)
                     if success:
                         st.session_state.last_loaded_run_id = None # Force reload on next success
