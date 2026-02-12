@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import itertools
+import json
 from src.analyzer import calculate_change
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import os
@@ -140,6 +141,14 @@ def _process_structure(df_all, s_dict, filter_keys, filter_values, target_cr_min
             best_idx_in_scores = np.argmax(scores)
             best_hit_idx = raw_hit_indices[best_idx_in_scores]
             best_hit_date = df_all['date'].iloc[best_hit_idx].strftime('%Y-%m-%d %H:%M')
+            
+            # Year Summary for True Hits
+            kept_dates = df_all['date'].iloc[kept_indices]
+            # Convert to string year keys for JSON compatibility
+            hits_per_year = kept_dates.dt.year.value_counts().sort_index().to_dict()
+            # Convert keys to string
+            hits_per_year = {str(k): int(v) for k, v in hits_per_year.items()}
+            hits_per_year_json = json.dumps(hits_per_year)
 
         total_b = int(total_bumps_vec[b])
         res = s_dict.copy()
@@ -149,7 +158,9 @@ def _process_structure(df_all, s_dict, filter_keys, filter_values, target_cr_min
         res['total_hits'] = raw_hits
         res['true_hits'] = true_hits
         res['hits'] = raw_hits
-        if raw_hits > 0: res['best_hit_date'] = best_hit_date
+        if raw_hits > 0:
+            res['best_hit_date'] = best_hit_date
+            res['hits_per_year'] = hits_per_year_json
         
         if detailed and raw_hits > 0:
             true_hit_set = set(kept_indices)

@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import time
+import json
 from src.search_engine import GoalSeeker
 from src.ui.utils import log_perf
 from src.cloud_runner import CloudRunner
@@ -220,6 +221,43 @@ def render_goal_seek(df, cli_args, val_report):
         st.write("### 📊 Search Results")
         
         display_df = st.session_state.gs_results.copy()
+
+        # --- SUMMARY DASHBOARD ---
+        with st.container():
+            st.markdown("#### 📈 Result Summary")
+            
+            # 1. Scalar Metrics
+            num_matches = len(display_df)
+            max_total = display_df['total_hits'].max() if not display_df.empty else 0
+            max_true = display_df['true_hits'].max() if not display_df.empty else 0
+            
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Matches Found", num_matches)
+            m2.metric("Max Total Hits", max_total)
+            m3.metric("Max True Hits", max_true)
+            
+            # 2. Year Distribution (from Top Result)
+            if not display_df.empty:
+                top_row = display_df.iloc[0]
+                hits_per_year_json = top_row.get('hits_per_year')
+                
+                if hits_per_year_json and isinstance(hits_per_year_json, str):
+                    try:
+                        hpy_dict = json.loads(hits_per_year_json)
+                        # Convert to DataFrame for chart
+                        df_chart = pd.DataFrame([
+                            {"Year": k, "Hits": v} 
+                            for k, v in hpy_dict.items()
+                        ])
+                        
+                        if not df_chart.empty:
+                            df_chart = df_chart.sort_values("Year")
+                            st.caption(f"📅 **Hits per Year** (Best Result: {int(top_row['total_hits'])} hits)")
+                            st.bar_chart(df_chart, x="Year", y="Hits", color="#4CAF50", use_container_width=True)
+                    except Exception:
+                        st.warning("Could not parse Year Summary data.")
+
+        st.divider()
         
         # Display Optimization Status
         opt_mode = display_df.iloc[0].get('optimization_mode', 'UNKNOWN') if not display_df.empty else 'UNKNOWN'

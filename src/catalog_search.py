@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import itertools
+import json
 from src.catalog import WindowCatalog
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import os
@@ -129,6 +130,12 @@ class CatalogSearcher:
                     best_hit_idx = raw_hit_indices[best_idx_in_scores]
                     best_hit_date = pd.Timestamp(self.dates_raw[best_hit_idx]).strftime('%Y-%m-%d %H:%M')
                     true_hit_set = set(kept_indices)
+                    
+                    # Year Summary for True Hits
+                    hit_dates = pd.to_datetime(self.dates_raw[kept_indices])
+                    hits_per_year = hit_dates.year.value_counts().sort_index().to_dict()
+                    hits_per_year = {str(k): int(v) for k, v in hits_per_year.items()}
+                    hits_per_year_json = json.dumps(hits_per_year)
 
                 # Store
                 base_row = {
@@ -149,6 +156,7 @@ class CatalogSearcher:
                 if hits > 0 or total_bumps > 0:
                     if hits > 0:
                         base_row['best_hit_date'] = best_hit_date
+                        base_row['hits_per_year'] = hits_per_year_json
                         
                     if detailed and hits > 0:
                         hits_indices = raw_hit_indices
