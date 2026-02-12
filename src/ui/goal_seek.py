@@ -7,18 +7,30 @@ from src.search_engine import GoalSeeker
 from src.ui.utils import log_perf
 from src.cloud_runner import CloudRunner
 
-def render_range_input(label, min_val, max_val, default_start, default_end, default_step, key_prefix, compact=False):
+def render_range_input(label, min_val, max_val, default_start, default_end, default_step, key_prefix, compact=False, smart_step=False):
     # Use st.markdown/st.columns to respect current context (expander or sidebar)
     st.markdown(f"**{label}**")
     is_float = isinstance(default_step, float)
     col1, col2, col3 = st.columns(3)
     
     label_visibility = "collapsed" if compact else "visible"
+    
+    def update_step():
+        if not smart_step: return
+        
+        start_key = f"{key_prefix}_start"
+        step_key = f"{key_prefix}_step"
+        
+        if start_key in st.session_state:
+            val = st.session_state[start_key]
+            # 3% rule: step = floor(window * 0.03), min 1
+            new_step = max(1, int(val * 0.03))
+            st.session_state[step_key] = new_step
 
     with col1:
         if compact:
             st.markdown("<div style='font-size:0.8em; margin-bottom:0px; color:#888'>Start</div>", unsafe_allow_html=True)
-        start = st.number_input("Start", min_value=min_val, max_value=max_val, value=default_start, key=f"{key_prefix}_start", label_visibility=label_visibility)
+        start = st.number_input("Start", min_value=min_val, max_value=max_val, value=default_start, key=f"{key_prefix}_start", label_visibility=label_visibility, on_change=update_step)
     with col2:
         if compact:
             st.markdown("<div style='font-size:0.8em; margin-bottom:0px; color:#888'>End</div>", unsafe_allow_html=True)
@@ -56,10 +68,10 @@ def render_goal_seek(df, cli_args, val_report):
         gs_params = {}
         
         # Lengths (Compact Mode)
-        b_len_start, b_len_end, b_len_step = render_range_input("Bump Length (min)", 1, 2880, 3, 6, 1, "gs_b_len", compact=True)
+        b_len_start, b_len_end, b_len_step = render_range_input("Bump Length (min)", 1, 2880, 3, 6, 1, "gs_b_len", compact=True, smart_step=True)
         gs_params['bump_len'] = (b_len_start, b_len_end, b_len_step)
         
-        s_len_start, s_len_end, s_len_step = render_range_input("Slide Length (min)", 1, 2880, 3, 6, 1, "gs_s_len", compact=True)
+        s_len_start, s_len_end, s_len_step = render_range_input("Slide Length (min)", 1, 2880, 3, 6, 1, "gs_s_len", compact=True, smart_step=True)
         gs_params['slide_len'] = (s_len_start, s_len_end, s_len_step)
         
         st.markdown("---")
@@ -220,10 +232,11 @@ def render_goal_seek(df, cli_args, val_report):
             matches = len(df_res)
             hit_percentage = (total_hits / matches) if matches > 0 else 0
             
-            col_s1, col_s2, col_s3 = st.columns(3)
-            col_s1.metric("Total Hits", f"{total_hits:,.0f}")
-            col_s2.metric("True Hits", f"{true_hits:,.0f}")
-            col_s3.metric("Hit Percentage (Avg Hits/Match)", f"{hit_percentage:.2f}")
+            col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+            col_s1.metric("Matches", f"{matches:,.0f}")
+            col_s2.metric("Total Hits", f"{total_hits:,.0f}")
+            col_s3.metric("True Hits", f"{true_hits:,.0f}")
+            col_s4.metric("Hit Percentage", f"{hit_percentage:.2f}")
             
             st.dataframe(df_res, use_container_width=True)
             

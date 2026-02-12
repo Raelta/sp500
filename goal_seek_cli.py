@@ -3,11 +3,9 @@ import pandas as pd
 import sys
 import time
 import os
+import numpy as np
 from src.data_loader import load_data_uncached
 from src.search_engine import GoalSeeker
-from src.catalog import WindowCatalog
-from src.catalog_search import CatalogSearcher
-from src.data_validator import validate_dataset
 
 def parse_args():
     description = "Goal Seek CLI for SP500 Bump & Slide Analysis"
@@ -59,11 +57,6 @@ Output Columns:
     parser.add_argument("--output", default="goal_seek_results.csv", help="Output CSV filename")
     parser.add_argument("--detailed", action="store_true", help="Output detailed matches (one row per match) in results CSV instead of summaries")
     
-    # Catalog Options
-    parser.add_argument("--build-catalog", action="store_true", help="Build the Window Catalog before searching")
-    parser.add_argument("--use-catalog", action="store_true", help="Use pre-computed catalog for search")
-    parser.add_argument("--catalog-max-len", type=int, default=2880, help="Max Window Length for Catalog (default 2880)")
-    
     # Helper to add range args
     def add_range_args(name, default_start, default_end, default_step, help_text):
         group = parser.add_argument_group(f"{name} Parameters")
@@ -80,10 +73,6 @@ Output Columns:
     parser.add_argument("--min-slide-threshold", type=float, default=3.0, help="Minimum Slide Threshold")
     
     # Volumes and Up% default to 0 (Locked)
-    # If user wants to vary them, they can set start/end/step.
-    # Default step 0 means locked? No, arange handles step. 
-    # If start==end, it's locked.
-    
     add_range_args("bump-vol", 0, 0, 10000, "Min Bump Size Vol")
     add_range_args("slide-vol", 0, 0, 10000, "Min Slide Size Vol")
     
@@ -108,8 +97,6 @@ def generate_grid(args):
     # Add Fixed Thresholds
     grid['bump_threshold'] = [args.min_bump_threshold]
     grid['slide_threshold'] = [args.min_slide_threshold]
-    
-    import numpy as np
     
     for arg_name, (key, dtype) in mappings.items():
         start = getattr(args, f"{arg_name.replace('-', '_')}_start")
@@ -141,50 +128,22 @@ def generate_grid(args):
 def main():
     args = parse_args()
     
-    # Auto-detect catalog
-    if not args.use_catalog and not args.build_catalog:
-        if os.path.exists("catalog/metadata.npz") and os.path.exists("catalog/change_matrix.npy"):
-            print("INFO: Pre-computed catalog found. Automatically enabling --use-catalog optimization.")
-            args.use_catalog = True
-
     print(f"--- Goal Seek CLI ---")
     print(f"Data: {args.data}")
     print(f"Min Bumps: >={args.min_bumps}")
     
-    # Handle Catalog Build
-    if args.build_catalog:
-        try:
-            print("Loading data for catalog build...")
-            df = load_data_uncached(args.data)
-            print(f"Loaded {len(df)} rows.")
-            
-            # Clean Duplicates
-            df = df.drop_duplicates(subset=['date'], keep='first').reset_index(drop=True)
-            
-            catalog = WindowCatalog()
-            catalog.build(df, max_len=args.catalog_max_len)
-            print("Catalog build completed successfully.")
-            sys.exit(0)
-        except Exception as e:
-            print(f"Error building catalog: {e}")
-            sys.exit(1)
-
-    # Load Data (if not using catalog, or if needed)
-    # If using catalog, we don't strictly need to load the dataframe unless we want to validate or use original columns not in catalog
-    # But current GoalSeeker needs df. CatalogSearcher loads from disk.
-    
+    # Load Data
     df = None
-    if not args.use_catalog:
-        try:
-            df = load_data_uncached(args.data)
-            print(f"Loaded {len(df)} rows.")
+    try:
+        df = load_data_uncached(args.data)
+        print(f"Loaded {len(df)} rows.")
+        
+        # Clean Duplicates
+        df = df.drop_duplicates(subset=['date'], keep='first').reset_index(drop=True)
             
-            # Clean Duplicates
-            df = df.drop_duplicates(subset=['date'], keep='first').reset_index(drop=True)
-                
-        except Exception as e:
-            print(f"Error loading data: {e}")
-            sys.exit(1)
+    except Exception as e:
+        print(f"Error loading data: {e}")
+        sys.exit(1)
         
     # Setup Grid
     params_grid = generate_grid(args)
@@ -210,17 +169,9 @@ def main():
     print(f"\nTotal Combinations to Search: {total}")
     
     # Setup Fixed Params (Types)
-    # CLI assumes types are fixed for now (Percent/Value?). 
-    # The UI defaults to Percent? 
-    # Let's assume Percent for now or add args. 
-    # The current `analyzer` uses `bump_thresh_type`.
-    # I should add args for types or default them.
-    # Defaulting to 'percent' as per typical use.
-    
     fixed_params = {
         'bump_thresh_type': 'percent',
         'slide_thresh_type': 'percent',
-        # Time range / Days could be added, defaulting to None (All)
     }
     
     # Setup Callback
@@ -231,14 +182,8 @@ def main():
         sys.stdout.write(f"\r[{pct*100:.1f}%] {msg}")
         sys.stdout.flush()
         
-    print("\nStarting Search...")
-    
-    if args.use_catalog:
-        print("Using Catalog Searcher...")
-        seeker = CatalogSearcher()
-    else:
-        print("Using Standard GoalSeeker...")
-        seeker = GoalSeeker(df)
+    print("\nStarting Search using Standard GoalSeeker...")
+    seeker = GoalSeeker(df)
     
     # Run Search
     try:

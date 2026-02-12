@@ -2,12 +2,18 @@ import os
 import json
 import time
 import pandas as pd
+import psutil
 from datetime import datetime
 from src.search_engine import GoalSeeker
-from src.catalog_search import CatalogSearcher
 from src.data_loader import load_data_uncached
 
+def log_memory(label=""):
+    process = psutil.Process(os.getpid())
+    mem = process.memory_info().rss / 1024 / 1024  # in MB
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] [MEM] {label}: {mem:.2f} MB", flush=True)
+
 def run_job():
+    log_memory("Job Start")
     # Cloud Run Jobs provide configuration via environment variables or files
     # We'll expect a JSON string in GOAL_SEEK_CONFIG
     config_str = os.environ.get("GOAL_SEEK_CONFIG")
@@ -33,49 +39,39 @@ def run_job():
     max_combinations = config.get("max_combinations", None)
     
     # --- SEARCH ENGINE SELECTION ---
-    # Check if pre-built catalog exists (Use env var for mount point)
-    catalog_dir = os.environ.get("CATALOG_DIR", "catalog")
-    optimization_mode = "NONE"
+    # Unified Engine: GoalSeeker (In-Memory)
+    optimization_mode = "GOAL_SEEKER_IN_MEMORY"
     
-    # Debug: Check if catalog dir exists
-    if os.path.exists(catalog_dir):
-        print(f"Checking catalog in: {catalog_dir}")
-    else:
-        print(f"Catalog directory not found at: {catalog_dir}")
-
-    if os.path.exists(os.path.join(catalog_dir, "metadata.npz")):
-        print(f"✅ Pre-built catalog found in /{catalog_dir}. Using CatalogSearcher optimization.")
-        # Debug: list files in catalog to verify upload
-        try:
-            files = os.listdir(catalog_dir)
-            print(f"📁 Catalog directory contents: {files}")
-        except Exception: pass
-        seeker = CatalogSearcher(catalog_dir=catalog_dir)
-        optimization_mode = "CATALOG"
-    else:
-        print(f"⚠️ Catalog not found. Loading raw data from {data_path} and using GoalSeeker.")
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] 🚀 Starting Cloud Job using In-Memory Engine", flush=True)
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Loading raw data from {data_path}...", flush=True)
+    
+    try:
         df = load_data_uncached(data_path)
         # Pre-clean duplicates as app does
         df = df.drop_duplicates(subset=['date'], keep='first').reset_index(drop=True)
-        seeker = GoalSeeker(df)
+        log_memory("Data Loaded")
+    except Exception as e:
+        print(f"Error loading data: {e}")
+        return
+
+    seeker = GoalSeeker(df)
     
-    print("Starting Search...", flush=True)
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Starting Search...", flush=True)
     
     def progress(msg, pct):
-        print(f"[{pct*100:.1f}%] {msg}", flush=True)
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] [{pct*100:.1f}%] {msg}", flush=True)
     
     start_time = time.time()
     results = seeker.search(
         params_grid,
         min_bumps=min_bumps,
-        progress_callback=progress,
-        fast_mode=fast_mode,
-        max_combinations=max_combinations
+        progress_callback=progress
     )
     end_time = time.time()
     duration_sec = end_time - start_time
     
-    print(f"Search complete. Found {len(results)} results in {duration_sec:.2f} seconds.")
+    log_memory("Search Complete")
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Search complete. Found {len(results)} results in {duration_sec:.2f} seconds.")
     
     # Inject metadata into results for UI verification
     if not results.empty:
@@ -120,7 +116,8 @@ def run_job():
                         "result_blob": blob_name,
                         "total_results": len(results),
                         "optimization_mode": optimization_mode,
-                        "duration_sec": duration_sec
+                        "duration_sec": duration_sec,
+                        "memory_mb": psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024
                     }
                     
                     meta_blob = meta_bucket.blob(meta_blob_name)

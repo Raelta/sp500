@@ -19,13 +19,11 @@ RUN pip install --no-cache-dir -r requirements.txt --root-user-action=ignore
 # Add GCP storage client for cloud_job
 RUN pip install --no-cache-dir google-cloud-storage --root-user-action=ignore
 
-# Copy source code and pre-built catalog (if exists)
+# Copy source code
 COPY src/ ./src/
 COPY spy_data_25yr.parquet .
 COPY cloud_job.py .
 COPY precompute_validation.py .
-# Catalog is now mounted via GCS volume
-# COPY catalog/ ./catalog/
 
 # Pre-compute validation report to speed up app startup
 RUN python precompute_validation.py

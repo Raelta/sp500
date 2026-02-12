@@ -40,37 +40,20 @@ echo ""
 echo "🔄 Step 2: Updating Cloud Run Job..."
 echo "--------------------------------------------------------"
 
-# Check if job exists first
-if gcloud beta run jobs describe "$JOB_NAME" --project "$PROJECT_ID" --region "$REGION" > /dev/null 2>&1; then
-    # Update existing job (Clear volumes first to ensure idempotency)
-    gcloud beta run jobs update "$JOB_NAME" \
-        --image "$IMAGE_URI" \
-        --region "$REGION" \
-        --project "$PROJECT_ID" \
-        --tasks 1 \
-        --cpu 8 \
-        --memory 16Gi \
-        --task-timeout 60m \
-        --clear-volumes \
-        --add-volume name=catalog-vol,type=cloud-storage,bucket=$BUCKET_NAME \
-        --add-volume-mount volume=catalog-vol,mount-path=/mnt/gcs \
-        --set-env-vars CATALOG_DIR=/mnt/gcs/catalog
-else
-    # Create new job if it doesn't exist
-    echo "Job not found. Creating new job..."
-    gcloud beta run jobs create "$JOB_NAME" \
-        --image "$IMAGE_URI" \
-        --region "$REGION" \
-        --project "$PROJECT_ID" \
-        --tasks 1 \
-        --cpu 8 \
-        --memory 16Gi \
-        --task-timeout 60m \
-        --max-retries 0 \
-        --add-volume name=catalog-vol,type=cloud-storage,bucket=$BUCKET_NAME \
-        --add-volume-mount volume=catalog-vol,mount-path=/mnt/gcs \
-        --set-env-vars CATALOG_DIR=/mnt/gcs/catalog
-fi
+# Delete existing job to ensure clean state (removes old volume mounts)
+echo "Recreating Cloud Run Job to ensure clean volume configuration..."
+gcloud beta run jobs delete "$JOB_NAME" --project "$PROJECT_ID" --region "$REGION" --quiet 2>/dev/null || true
+
+# Create new job
+gcloud beta run jobs create "$JOB_NAME" \
+    --image "$IMAGE_URI" \
+    --region "$REGION" \
+    --project "$PROJECT_ID" \
+    --tasks 1 \
+    --cpu 8 \
+    --memory 16Gi \
+    --task-timeout 60m \
+    --max-retries 0
 
 if [ $? -ne 0 ]; then
     echo "❌ Deployment failed."
