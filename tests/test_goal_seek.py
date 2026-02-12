@@ -160,3 +160,77 @@ def test_hits_per_year():
     # Ideally both, but check at least one valid year key exists
     assert any(k in ['2022', '2023'] for k in hpy.keys())
     assert all(isinstance(v, int) for v in hpy.values())
+
+def test_detailed_mode():
+    seeker = GoalSeeker(df)
+    params_grid = {
+        'bump_len': [5],
+        'slide_len': [5],
+        'bump_threshold': [0.01],
+        'slide_threshold': [0.01],
+        'min_bump_vol': [0],
+        'min_slide_vol': [0],
+        'bump_up_pct': [0],
+        'slide_up_pct': [0]
+    }
+    fixed_params = { 'bump_thresh_type': 'percent', 'slide_thresh_type': 'percent' }
+    
+    # Run with detailed=True
+    results = seeker.search(params_grid, fixed_params, target_cr_min=0, detailed=True)
+    
+    assert not results.empty
+    # Detailed columns should exist
+    expected_cols = ['bump_start_date', 'bump_end_date', 'slide_start_date', 'slide_end_date',
+                     'bump_change', 'slide_change', 'bump_vol', 'slide_vol',
+                     'bump_up_pct_actual', 'slide_up_pct_actual', 'is_true_hit']
+    for col in expected_cols:
+        assert col in results.columns
+    
+    # Check is_true_hit boolean
+    assert results['is_true_hit'].dtype == bool
+
+def test_cli_command_generation():
+    seeker = GoalSeeker(df)
+    params_grid = {
+        'bump_len': [5],
+        'slide_len': [5],
+        'bump_threshold': [0.01],
+        'slide_threshold': [0.01],
+        'min_bump_vol': [0],
+        'min_slide_vol': [0],
+        'bump_up_pct': [0],
+        'slide_up_pct': [0]
+    }
+    fixed_params = { 'bump_thresh_type': 'percent', 'slide_thresh_type': 'percent' }
+    
+    results = seeker.search(params_grid, fixed_params, target_cr_min=0)
+    assert 'cli_command' in results.columns
+    
+    cmd = results.iloc[0]['cli_command']
+    assert isinstance(cmd, str)
+    assert "python goal_seek_cli.py" in cmd
+    # Check if parameters are in the command
+    assert "--bump-len-start 5" in cmd
+    assert "--bump-len-end 5" in cmd
+    assert "--min-bump-threshold 0.01" in cmd
+
+def test_empty_results():
+    seeker = GoalSeeker(df)
+    # Impossible params
+    params_grid = {
+        'bump_len': [5],
+        'slide_len': [5],
+        'bump_threshold': [1000.0], # Huge threshold impossible for this data
+        'slide_threshold': [1000.0],
+        'min_bump_vol': [0],
+        'min_slide_vol': [0],
+        'bump_up_pct': [0],
+        'slide_up_pct': [0]
+    }
+    fixed_params = { 'bump_thresh_type': 'percent', 'slide_thresh_type': 'percent' }
+    
+    results = seeker.search(params_grid, fixed_params, target_cr_min=0)
+    
+    assert results.empty
+    # Should be empty DataFrame but well-formed (or empty with no columns? pandas usually returns empty)
+    assert isinstance(results, pd.DataFrame)
