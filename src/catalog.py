@@ -14,28 +14,32 @@ class WindowCatalog:
         self.vol_cumsum = None
         self.up_cumsum = None
         self.dates = None
+        self.scale_factor = 1.0
         
-    def build(self, df, max_len=360):
+    def build(self, df, max_len=2880, scale_factor=5.0):
         """
         Builds the catalog from the provided DataFrame.
         df: DataFrame with 'open', 'close', 'volume', 'date' columns.
         max_len: Maximum window length to compute.
+        scale_factor: Multiplier for storing percentage changes as int8.
+                      Default 5.0 allows range +/- 25.4% with 0.2% precision.
         """
         if not os.path.exists(self.catalog_dir):
             os.makedirs(self.catalog_dir)
             
         n_rows = len(df)
-        print(f"Building catalog for {n_rows} rows, max_len={max_len}...")
+        print(f"Building catalog for {n_rows} rows, max_len={max_len}, scale={scale_factor}...")
         
         # 1. Create Change Matrix (Memory Mapped to write directly to disk)
         # Shape: (n_rows, max_len + 1). Column 0 is unused or length 0.
         # We will use columns 1..max_len for lengths.
         # Indices: Matrix[i, k] = Change for window starting at i with length k.
+        # Using int8 to save space (requires scaling)
         
-        print("Initializing Change Matrix...")
+        print("Initializing Change Matrix (int8)...")
         change_matrix = np.memmap(
             self.change_path, 
-            dtype='float32', 
+            dtype='int8', 
             mode='w+', 
             shape=(n_rows, max_len + 1)
         )
@@ -70,8 +74,16 @@ class WindowCatalog:
             # (End - Start) / Start * 100
             change = (current_closes - opens) / opens * 100
             
+            # Scale, Clip, and Cast to int8
+            # Range +/- 127 with scale 5 means +/- 25.4%
+            change = change * scale_factor
+            # Handle NaNs (convert to 0 or leave as 0? 0 implies no change. Let's use 0.)
+            change = np.nan_to_num(change, nan=0.0)
+            change = np.round(change)
+            change = np.clip(change, -127, 127)
+            
             # Write to matrix column
-            change_matrix[:, length] = change
+            change_matrix[:, length] = change.astype(np.int8)
             
         # Flush changes to disk
         change_matrix.flush()
@@ -107,7 +119,8 @@ class WindowCatalog:
             vol_cumsum=vol_cumsum,
             up_cumsum=up_cumsum,
             dates=dates,
-            max_len=max_len
+            max_len=max_len,
+            scale_factor=scale_factor
         )
         print("Metadata saved.")
         
@@ -124,6 +137,7 @@ class WindowCatalog:
         self.up_cumsum = meta['up_cumsum']
         self.dates = meta['dates']
         self.max_len = int(meta['max_len'])
+        self.scale_factor = float(meta.get('scale_factor', 1.0))
         
         n_rows = len(self.dates)
         
@@ -131,7 +145,7 @@ class WindowCatalog:
         mode = 'r' if read_only else 'r+'
         self.change_matrix = np.memmap(
             self.change_path,
-            dtype='float32',
+            dtype='int8',
             mode=mode,
             shape=(n_rows, self.max_len + 1)
         )
@@ -145,7 +159,9 @@ class WindowCatalog:
         if start_idx + length > len(self.change_matrix):
             return None
             
-        change = self.change_matrix[start_idx, length]
+        change_int = self.change_matrix[start_idx, length]
+        change = float(change_int) / self.scale_factor
+        
         vol = self.vol_cumsum[start_idx + length] - self.vol_cumsum[start_idx]
         up = self.up_cumsum[start_idx + length] - self.up_cumsum[start_idx]
         

@@ -62,7 +62,7 @@ Output Columns:
     # Catalog Options
     parser.add_argument("--build-catalog", action="store_true", help="Build the Window Catalog before searching")
     parser.add_argument("--use-catalog", action="store_true", help="Use pre-computed catalog for search")
-    parser.add_argument("--catalog-max-len", type=int, default=360, help="Max Window Length for Catalog (default 360)")
+    parser.add_argument("--catalog-max-len", type=int, default=2880, help="Max Window Length for Catalog (default 2880)")
     
     # Helper to add range args
     def add_range_args(name, default_start, default_end, default_step, help_text):

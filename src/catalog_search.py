@@ -14,6 +14,7 @@ class CatalogSearcher:
         self.change_matrix = self.catalog.change_matrix
         self.dates_raw = self.catalog.dates
         self.n_rows = len(self.dates_raw)
+        self.scale_factor = self.catalog.scale_factor
         
     def search(self, params_grid, fixed_params=None, target_cr_min=0, min_bumps=0, progress_callback=None, detailed=False):
         """
@@ -55,7 +56,10 @@ class CatalogSearcher:
                 
             # Slices
             # Bump Metrics
-            b_change = self.change_matrix[:max_idx, bump_len]
+            # Unscale from int8 (fast vectorized op)
+            b_change_raw = self.change_matrix[:max_idx, bump_len]
+            b_change = b_change_raw.astype(np.float32) / self.scale_factor
+            
             b_vol = self.vol_cumsum[bump_len : max_idx + bump_len] - self.vol_cumsum[0 : max_idx]
             
             b_up_count = self.up_cumsum[bump_len : max_idx + bump_len] - self.up_cumsum[0 : max_idx]
@@ -63,7 +67,9 @@ class CatalogSearcher:
             
             # SLIDE Metrics
             slide_start_offset = bump_len
-            s_change = self.change_matrix[slide_start_offset : max_idx + slide_start_offset, slide_len]
+            s_change_raw = self.change_matrix[slide_start_offset : max_idx + slide_start_offset, slide_len]
+            s_change = s_change_raw.astype(np.float32) / self.scale_factor
+            
             s_vol = self.vol_cumsum[slide_start_offset + slide_len : max_idx + slide_start_offset + slide_len] - \
                     self.vol_cumsum[slide_start_offset : max_idx + slide_start_offset]
             s_up_count = self.up_cumsum[slide_start_offset + slide_len : max_idx + slide_start_offset + slide_len] - \

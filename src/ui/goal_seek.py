@@ -95,9 +95,9 @@ def render_goal_seek(df, cli_args, val_report):
     # --- SIDEBAR INPUTS ---
     st.sidebar.title("Goal Seek Parameters")
     gs_params = {}
-    b_len_start, b_len_end, b_len_step = render_range_input("Bump Length (min)", 1, 390, 3, 6, 1, "gs_b_len")
+    b_len_start, b_len_end, b_len_step = render_range_input("Bump Length (min)", 1, 2880, 3, 6, 1, "gs_b_len")
     gs_params['bump_len'] = (b_len_start, b_len_end, b_len_step)
-    s_len_start, s_len_end, s_len_step = render_range_input("Slide Length (min)", 1, 390, 3, 6, 1, "gs_s_len")
+    s_len_start, s_len_end, s_len_step = render_range_input("Slide Length (min)", 1, 2880, 3, 6, 1, "gs_s_len")
     gs_params['slide_len'] = (s_len_start, s_len_end, s_len_step)
     
     st.sidebar.divider()
