@@ -57,10 +57,10 @@ def run_job():
         df = df.drop_duplicates(subset=['date'], keep='first').reset_index(drop=True)
         seeker = GoalSeeker(df)
     
-    print("Starting Search...")
+    print("Starting Search...", flush=True)
     
     def progress(msg, pct):
-        print(f"[{pct*100:.1f}%] {msg}")
+        print(f"[{pct*100:.1f}%] {msg}", flush=True)
     
     start_time = time.time()
     results = seeker.search(

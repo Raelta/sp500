@@ -48,8 +48,9 @@ if gcloud beta run jobs describe "$JOB_NAME" --project "$PROJECT_ID" --region "$
         --region "$REGION" \
         --project "$PROJECT_ID" \
         --tasks 1 \
-        --cpu 4 \
-        --memory 8Gi \
+        --cpu 8 \
+        --memory 16Gi \
+        --task-timeout 60m \
         --clear-volumes \
         --add-volume name=catalog-vol,type=cloud-storage,bucket=$BUCKET_NAME \
         --add-volume-mount volume=catalog-vol,mount-path=/mnt/gcs \
@@ -62,8 +63,9 @@ else
         --region "$REGION" \
         --project "$PROJECT_ID" \
         --tasks 1 \
-        --cpu 4 \
-        --memory 8Gi \
+        --cpu 8 \
+        --memory 16Gi \
+        --task-timeout 60m \
         --max-retries 0 \
         --add-volume name=catalog-vol,type=cloud-storage,bucket=$BUCKET_NAME \
         --add-volume-mount volume=catalog-vol,mount-path=/mnt/gcs \

@@ -8,19 +8,30 @@ from src.search_engine import GoalSeeker
 from src.ui.utils import log_perf
 from src.cloud_runner import CloudRunner
 
-def render_range_input(label, min_val, max_val, default_start, default_end, default_step, key_prefix):
-    st.sidebar.markdown(f"**{label}**")
+def render_range_input(label, min_val, max_val, default_start, default_end, default_step, key_prefix, compact=False):
+    # Use st.markdown/st.columns to respect current context (expander or sidebar)
+    st.markdown(f"**{label}**")
     is_float = isinstance(default_step, float)
-    col1, col2, col3 = st.sidebar.columns(3)
+    col1, col2, col3 = st.columns(3)
+    
+    label_visibility = "collapsed" if compact else "visible"
+
     with col1:
-        start = st.number_input("Start", min_value=min_val, max_value=max_val, value=default_start, key=f"{key_prefix}_start")
+        if compact:
+            st.markdown("<div style='font-size:0.8em; margin-bottom:0px; color:#888'>Start</div>", unsafe_allow_html=True)
+        start = st.number_input("Start", min_value=min_val, max_value=max_val, value=default_start, key=f"{key_prefix}_start", label_visibility=label_visibility)
     with col2:
-        end = st.number_input("End", min_value=min_val, max_value=max_val, value=default_end, key=f"{key_prefix}_end")
+        if compact:
+            st.markdown("<div style='font-size:0.8em; margin-bottom:0px; color:#888'>End</div>", unsafe_allow_html=True)
+        end = st.number_input("End", min_value=min_val, max_value=max_val, value=default_end, key=f"{key_prefix}_end", label_visibility=label_visibility)
     with col3:
+        if compact:
+            st.markdown("<div style='font-size:0.8em; margin-bottom:0px; color:#888'>Step</div>", unsafe_allow_html=True)
         s_min = 0.0 if is_float else 0
         s_max = float(max_val) if is_float else int(max_val)
         s_val = float(default_step) if is_float else int(default_step)
-        step = st.number_input("Step", min_value=s_min, max_value=s_max, value=s_val, key=f"{key_prefix}_step")
+        step = st.number_input("Step", min_value=s_min, max_value=s_max, value=s_val, key=f"{key_prefix}_step", label_visibility=label_visibility)
+        
     return start, end, step
 
 def generate_grid_from_ui(params):
@@ -118,60 +129,58 @@ def auto_monitor_job(runner, job_name, bucket):
 
 def render_goal_seek(df, cli_args, val_report):
     # --- SIDEBAR INPUTS ---
-    st.sidebar.header("Goal Seek Parameters")
-    gs_params = {}
-    
-    # Lengths
-    b_len_start, b_len_end, b_len_step = render_range_input("Bump Length (min)", 1, 2880, 3, 6, 1, "gs_b_len")
-    gs_params['bump_len'] = (b_len_start, b_len_end, b_len_step)
-    
-    s_len_start, s_len_end, s_len_step = render_range_input("Slide Length (min)", 1, 2880, 3, 6, 1, "gs_s_len")
-    gs_params['slide_len'] = (s_len_start, s_len_end, s_len_step)
-    
-    st.sidebar.markdown("---")
-    
-    # Thresholds (Side by side)
-    col_th1, col_th2 = st.sidebar.columns(2)
-    with col_th1:
-        min_b_thresh = st.number_input("Min Bump Thresh %", value=3.0, step=0.1, key="gs_min_b_thresh")
-    with col_th2:
-        min_s_thresh = st.number_input("Min Slide Thresh %", value=3.0, step=0.1, key="gs_min_s_thresh")
-    
-    st.sidebar.markdown("---")
-    
-    # Volumes
-    b_vol_start, b_vol_end, b_vol_step = render_range_input("Min Bump Volume", 0, 10000000, 0, 0, 10000, "gs_b_vol")
-    gs_params['min_bump_vol'] = (b_vol_start, b_vol_end, b_vol_step)
-    
-    s_vol_start, s_vol_end, s_vol_step = render_range_input("Min Slide Volume", 0, 10000000, 0, 0, 10000, "gs_s_vol")
-    gs_params['min_slide_vol'] = (s_vol_start, s_vol_end, s_vol_step)
-    
-    st.sidebar.markdown("---")
-    
-    # Percentages
-    b_up_start, b_up_end, b_up_step = render_range_input("Bump Up %", 0, 100, 0, 0, 5, "gs_b_up")
-    gs_params['bump_up_pct'] = (b_up_start, b_up_end, b_up_step)
-    
-    s_up_start, s_up_end, s_up_step = render_range_input("Slide Up %", 0, 100, 0, 0, 5, "gs_s_up")
-    gs_params['slide_up_pct'] = (s_up_start, s_up_end, s_up_step)
-    
-    st.sidebar.markdown("---")
-    
-    # Execution
-    col_req1, col_req2 = st.sidebar.columns(2)
-    with col_req1:
-        min_bumps_req = st.number_input("Min Bumps Req", value=0, step=1)
-    with col_req2:
-        st.write("") # Spacer for vertical alignment if needed, or just let checkbox sit
+    with st.sidebar:
+        st.header("Goal Seek Parameters")
+        gs_params = {}
+        
+        # Lengths (Compact Mode)
+        b_len_start, b_len_end, b_len_step = render_range_input("Bump Length (min)", 1, 2880, 3, 6, 1, "gs_b_len", compact=True)
+        gs_params['bump_len'] = (b_len_start, b_len_end, b_len_step)
+        
+        s_len_start, s_len_end, s_len_step = render_range_input("Slide Length (min)", 1, 2880, 3, 6, 1, "gs_s_len", compact=True)
+        gs_params['slide_len'] = (s_len_start, s_len_end, s_len_step)
+        
+        st.markdown("---")
+        
+        # Thresholds (Side by side)
+        col_th1, col_th2 = st.columns(2)
+        with col_th1:
+            min_b_thresh = st.number_input("Min Bump Thresh %", value=3.0, step=0.1, key="gs_min_b_thresh")
+        with col_th2:
+            min_s_thresh = st.number_input("Min Slide Thresh %", value=3.0, step=0.1, key="gs_min_s_thresh")
+        
+        st.markdown("---")
+        
+        # Advanced Parameters Expander
+        with st.expander("Advanced parameters", expanded=False):
+            # Volumes
+            b_vol_start, b_vol_end, b_vol_step = render_range_input("Min Bump Volume", 0, 10000000, 0, 0, 10000, "gs_b_vol", compact=True)
+            gs_params['min_bump_vol'] = (b_vol_start, b_vol_end, b_vol_step)
+            
+            s_vol_start, s_vol_end, s_vol_step = render_range_input("Min Slide Volume", 0, 10000000, 0, 0, 10000, "gs_s_vol", compact=True)
+            gs_params['min_slide_vol'] = (s_vol_start, s_vol_end, s_vol_step)
+            
+            # Percentages
+            b_up_start, b_up_end, b_up_step = render_range_input("Bump Up %", 0, 100, 0, 0, 5, "gs_b_up", compact=True)
+            gs_params['bump_up_pct'] = (b_up_start, b_up_end, b_up_step)
+            
+            s_up_start, s_up_end, s_up_step = render_range_input("Slide Up %", 0, 100, 0, 0, 5, "gs_s_up", compact=True)
+            gs_params['slide_up_pct'] = (s_up_start, s_up_end, s_up_step)
+
+            min_bumps_req = st.number_input("Min Bumps Req", value=0, step=1)
+        
+        st.markdown("---")
+        
+        # Execution
         run_cloud = st.checkbox("☁️ Cloud Run", value=True)
-    
-    if run_cloud:
-        with st.sidebar.expander("🛠️ GCP Configuration", expanded=False):
-            gcp_project = st.text_input("Project ID", value="sp500-479009", key="gs_gcp_project")
-            gcp_region = st.text_input("Region", value="europe-west2", key="gs_gcp_region")
-            gcp_job_name = st.text_input("Job Name", value="sp500-goal-seek", key="gs_gcp_job_name")
-            gcp_bucket = st.text_input("GCS Bucket", value="sp500-goal-seek-results", key="gs_gcp_bucket")
-            gcp_user_label = st.text_input("User / Run Label", value="user", key="gs_gcp_user_label", help="Identifier for who is running this job. Used in filenames.")
+        
+        if run_cloud:
+            with st.expander("🛠️ GCP Configuration", expanded=False):
+                gcp_project = st.text_input("Project ID", value="sp500-479009", key="gs_gcp_project")
+                gcp_region = st.text_input("Region", value="europe-west2", key="gs_gcp_region")
+                gcp_job_name = st.text_input("Job Name", value="sp500-goal-seek", key="gs_gcp_job_name")
+                gcp_bucket = st.text_input("GCS Bucket", value="sp500-goal-seek-results", key="gs_gcp_bucket")
+                gcp_user_label = st.text_input("User / Run Label", value="user", key="gs_gcp_user_label", help="Identifier for who is running this job. Used in filenames.")
 
     # Catalog Check
     from src.catalog import check_catalog_status

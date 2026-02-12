@@ -343,7 +343,8 @@ gcloud beta run jobs create {job_name} \\
     --tasks 1 \\
     --max-retries 0 \\
     --region {self.region} \\
-    --cpu 4 --memory 8Gi \\
+    --cpu 8 --memory 16Gi \\
+    --task-timeout 60m \\
     --project {self.project_id}
 
 # 3. Setup Local Auth (for UI buttons to work locally)

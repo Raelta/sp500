@@ -161,6 +161,11 @@ def inject_compact_sidebar_style():
         section[data-testid="stSidebar"] .stRadio > div {
             margin-top: -10px;
         }
+
+        /* Hide Number Input Stepper Buttons */
+        section[data-testid="stSidebar"] [data-testid="stNumberInput"] button {
+            display: none !important;
+        }
         </style>
         """,
         unsafe_allow_html=True,
