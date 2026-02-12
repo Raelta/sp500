@@ -1,5 +1,6 @@
 import os
 import json
+import time
 import pandas as pd
 from datetime import datetime
 from src.search_engine import GoalSeeker
@@ -29,10 +30,16 @@ def run_job():
     output_path = config.get("output_path", "/tmp/results.csv")
     
     # --- SEARCH ENGINE SELECTION ---
-    # Check if pre-built catalog exists
-    catalog_dir = "catalog"
+    # Check if pre-built catalog exists (Use env var for mount point)
+    catalog_dir = os.environ.get("CATALOG_DIR", "catalog")
     optimization_mode = "NONE"
     
+    # Debug: Check if catalog dir exists
+    if os.path.exists(catalog_dir):
+        print(f"Checking catalog in: {catalog_dir}")
+    else:
+        print(f"Catalog directory not found at: {catalog_dir}")
+
     if os.path.exists(os.path.join(catalog_dir, "metadata.npz")):
         print(f"✅ Pre-built catalog found in /{catalog_dir}. Using CatalogSearcher optimization.")
         # Debug: list files in catalog to verify upload
@@ -53,14 +60,17 @@ def run_job():
     
     def progress(msg, pct):
         print(f"[{pct*100:.1f}%] {msg}")
-        
+    
+    start_time = time.time()
     results = seeker.search(
         params_grid,
         min_bumps=min_bumps,
         progress_callback=progress
     )
+    end_time = time.time()
+    duration_sec = end_time - start_time
     
-    print(f"Search complete. Found {len(results)} results.")
+    print(f"Search complete. Found {len(results)} results in {duration_sec:.2f} seconds.")
     
     # Inject metadata into results for UI verification
     if not results.empty:
@@ -103,7 +113,8 @@ def run_job():
                         "min_bumps": min_bumps,
                         "result_blob": blob_name,
                         "total_results": len(results),
-                        "optimization_mode": optimization_mode
+                        "optimization_mode": optimization_mode,
+                        "duration_sec": duration_sec
                     }
                     
                     meta_blob = meta_bucket.blob(meta_blob_name)

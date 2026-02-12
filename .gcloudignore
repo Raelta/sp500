@@ -9,5 +9,5 @@ __pycache__/
 .hypothesis/
 .DS_Store
 
-# Include the catalog directory and its contents
-!catalog/
+# Exclude the catalog directory (it will be mounted via GCS)
+catalog/

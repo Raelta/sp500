@@ -172,6 +172,36 @@ def render_goal_seek(df, cli_args, val_report):
             total_combos *= len(v)
         
         st.markdown(f"**Search Scale:** `{total_combos}` combinations")
+        
+        # Estimate Time
+        if 'run_history' in st.session_state and st.session_state.run_history:
+            # Find last run with duration
+            last_valid_run = None
+            for r in st.session_state.run_history:
+                if r.get('duration_sec'):
+                    last_valid_run = r
+                    break
+            
+            if last_valid_run:
+                prev_grid = last_valid_run.get('params_grid', {})
+                prev_combos = 1
+                for v in prev_grid.values():
+                    prev_combos *= len(v)
+                
+                duration = float(last_valid_run['duration_sec'])
+                if duration > 0:
+                    rate = prev_combos / duration # combos per second
+                    est_seconds = total_combos / rate
+                    
+                    if est_seconds < 60:
+                        est_str = f"{est_seconds:.1f}s"
+                    elif est_seconds < 3600:
+                        est_str = f"{est_seconds/60:.1f}m"
+                    else:
+                        est_str = f"{est_seconds/3600:.1f}h"
+                        
+                    st.info(f"⏱️ **Estimated Time:** ~{est_str} (based on previous run)")
+
         with st.expander("View Parameter Summary", expanded=False):
             for k, v in grid.items():
                 if len(v) > 1:

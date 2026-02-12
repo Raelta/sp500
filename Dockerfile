@@ -22,7 +22,8 @@ COPY src/ ./src/
 COPY spy_data_25yr.parquet .
 COPY cloud_job.py .
 COPY precompute_validation.py .
-COPY catalog/ ./catalog/
+# Catalog is now mounted via GCS volume
+# COPY catalog/ ./catalog/
 
 # Pre-compute validation report to speed up app startup
 RUN python precompute_validation.py
