@@ -17,9 +17,12 @@ class CatalogSearcher:
         self.n_rows = len(self.dates_raw)
         self.scale_factor = self.catalog.scale_factor
         
-    def search(self, params_grid, fixed_params=None, target_cr_min=0, min_bumps=0, progress_callback=None, detailed=False):
+    def search(self, params_grid, fixed_params=None, target_cr_min=0, min_bumps=0, progress_callback=None, detailed=False, fast_mode=False, max_combinations=None):
         """
         Executes search using the pre-computed catalog.
+        
+        :param fast_mode: If True, returns after the first hit for any param combination.
+        :param max_combinations: Max number of parameter combinations to test per structure.
         """
         # 2. Define Parameter Groups
         bump_lens = params_grid.get('bump_len', [10])
@@ -44,7 +47,7 @@ class CatalogSearcher:
         results = []
         
         # Helper for vectorized search
-        def process_structure(bump_len, slide_len):
+        def process_structure(bump_len, slide_len, sub_progress_start=0.0, sub_progress_end=1.0):
             bump_len = int(bump_len)
             slide_len = int(slide_len)
             local_res = []
@@ -90,111 +93,152 @@ class CatalogSearcher:
             s_v_masks = {val: (s_vol >= val) for val in slide_vols}
             s_u_masks = {val: (s_up_pct >= val) for val in slide_ups}
             
-            filter_combos = itertools.product(bump_threshs, bump_vols, bump_ups, slide_threshs, slide_vols, slide_ups)
+            # Optimization: Nested Loop to avoid re-calculating bump masks
+            # Instead of iterating itertools.product(all_params), we iterate BUMP params,
+            # calculate mask, check min_bumps, then iterate SLIDE params.
             
-            for bt, bv, bu, st, sv, su in filter_combos:
-                # Bump Mask
+            bump_combos = list(itertools.product(bump_threshs, bump_vols, bump_ups))
+            slide_combos = list(itertools.product(slide_threshs, slide_vols, slide_ups))
+            
+            total_bump_combos = len(bump_combos)
+            total_slide_combos = len(slide_combos)
+            total_combos = total_bump_combos * total_slide_combos
+            
+            processed_combos = 0
+            report_every_combo = max(1, total_combos // 20)
+
+            for i_b, (bt, bv, bu) in enumerate(bump_combos):
+                # 1. Calculate Bump Mask ONCE for this bump combo
                 mask_b = b_t_masks[bt] & b_v_masks[bv] & b_u_masks[bu]
                 total_bumps = np.count_nonzero(mask_b)
                 
+                # 2. Optimization: Skip slide combos if not enough bumps
                 if total_bumps < min_bumps:
+                    # Even if skipped, we count progress
+                    processed_combos += total_slide_combos
+                    if progress_callback and (processed_combos % report_every_combo == 0):
+                        struct_pct = processed_combos / total_combos
+                        total_pct = sub_progress_start + (sub_progress_end - sub_progress_start) * struct_pct
+                        progress_callback(f"Structure ({bump_len}/{slide_len}): {int(struct_pct*100)}%", total_pct)
                     continue
                     
-                # Combine masks
-                mask_s = s_t_masks[st] & s_v_masks[sv] & s_u_masks[su]
-                final_mask = mask_b & mask_s
-                
-                # Get raw indices
-                raw_hit_indices = np.where(final_mask)[0]
-                hits = len(raw_hit_indices)
-                
-                # Calculate True Hits (Non-overlapping)
-                true_hits = 0
-                if hits > 0:
-                    scores = s_change_abs[raw_hit_indices]
-                    sorted_order = np.argsort(scores)[::-1]
-                    sorted_indices = raw_hit_indices[sorted_order]
+                # 3. Iterate Slide Combos only if we have bumps
+                for i_s, (st, sv, su) in enumerate(slide_combos):
+                    processed_combos += 1
                     
-                    kept_indices = []
-                    occupied = np.zeros(self.n_rows, dtype=bool)
-                    window_len = bump_len + slide_len
+                    if progress_callback and (processed_combos % report_every_combo == 0):
+                        struct_pct = processed_combos / total_combos
+                        total_pct = sub_progress_start + (sub_progress_end - sub_progress_start) * struct_pct
+                        progress_callback(f"Structure ({bump_len}/{slide_len}): {int(struct_pct*100)}%", total_pct)
                     
-                    for idx in sorted_indices:
-                        end_idx = min(idx + window_len, self.n_rows)
-                        if not occupied[idx:end_idx].any():
-                            kept_indices.append(idx)
-                            occupied[idx:end_idx] = True
-                            
-                    true_hits = len(kept_indices)
-                    best_idx_in_scores = np.argmax(scores)
-                    best_hit_idx = raw_hit_indices[best_idx_in_scores]
-                    best_hit_date = pd.Timestamp(self.dates_raw[best_hit_idx]).strftime('%Y-%m-%d %H:%M')
-                    true_hit_set = set(kept_indices)
-                    
-                    # Year Summary for True Hits
-                    hit_dates = pd.to_datetime(self.dates_raw[kept_indices])
-                    hits_per_year = hit_dates.year.value_counts().sort_index().to_dict()
-                    hits_per_year = {str(k): int(v) for k, v in hits_per_year.items()}
-                    hits_per_year_json = json.dumps(hits_per_year)
+                    if max_combinations and processed_combos > max_combinations:
+                        break
 
-                # Store
-                base_row = {
-                    'bump_len': bump_len,
-                    'slide_len': slide_len,
-                    'bump_threshold': float(bt),
-                    'min_bump_vol': int(bv),
-                    'bump_up_pct': float(bu),
-                    'slide_threshold': float(st),
-                    'min_slide_vol': int(sv),
-                    'slide_up_pct': float(su),
-                    'total_bumps': int(total_bumps),
-                    'total_hits': int(hits),
-                    'true_hits': int(true_hits),
-                    'hits': int(hits), # Alias for Total Hits
-                }
-                
-                if hits > 0 or total_bumps > 0:
+                    mask_s = s_t_masks[st] & s_v_masks[sv] & s_u_masks[su]
+                    final_mask = mask_b & mask_s
+                    
+                    # Get raw indices
+                    raw_hit_indices = np.where(final_mask)[0]
+                    hits = len(raw_hit_indices)
+                    
+                    # Fast Mode Check
+                    if fast_mode and hits > 0:
+                        local_res.append({ 
+                            'bump_len': bump_len, 'slide_len': slide_len, 
+                            'bump_threshold': float(bt), 'min_bump_vol': int(bv), 'bump_up_pct': float(bu), 
+                            'slide_threshold': float(st), 'min_slide_vol': int(sv), 'slide_up_pct': float(su), 
+                            'total_bumps': int(total_bumps), 'total_hits': int(hits), 
+                            'true_hits': -1, 'fast_mode_hit': True 
+                        })
+                        return local_res 
+
+                    # Calculate True Hits (Non-overlapping)
+                    true_hits = 0
                     if hits > 0:
-                        base_row['best_hit_date'] = best_hit_date
-                        base_row['hits_per_year'] = hits_per_year_json
+                        scores = s_change_abs[raw_hit_indices]
+                        sorted_order = np.argsort(scores)[::-1]
+                        sorted_indices = raw_hit_indices[sorted_order]
                         
-                    if detailed and hits > 0:
-                        hits_indices = raw_hit_indices
-                        dates_start = self.dates_raw[hits_indices]
-                        dates_bump_end = self.dates_raw[hits_indices + bump_len - 1]
-                        dates_slide_start = self.dates_raw[hits_indices + bump_len]
-                        dates_slide_end = self.dates_raw[hits_indices + bump_len + slide_len - 1]
+                        kept_indices = []
+                        occupied = np.zeros(self.n_rows, dtype=bool)
+                        window_len = bump_len + slide_len
                         
-                        one_min = np.timedelta64(1, 'm')
-                        gaps = dates_slide_start - dates_bump_end
-                        is_gap = gaps > one_min
+                        for idx in sorted_indices:
+                            end_idx = min(idx + window_len, self.n_rows)
+                            if not occupied[idx:end_idx].any():
+                                kept_indices.append(idx)
+                                occupied[idx:end_idx] = True
+                                
+                        true_hits = len(kept_indices)
+                        best_idx_in_scores = np.argmax(scores)
+                        best_hit_idx = raw_hit_indices[best_idx_in_scores]
+                        best_hit_date = pd.Timestamp(self.dates_raw[best_hit_idx]).strftime('%Y-%m-%d %H:%M')
+                        true_hit_set = set(kept_indices)
                         
-                        val_b_change = b_change[hits_indices]
-                        val_s_change = s_change[hits_indices]
-                        val_b_vol = b_vol[hits_indices]
-                        val_s_vol = s_vol[hits_indices]
-                        val_b_up = b_up_pct[hits_indices]
-                        val_s_up = s_up_pct[hits_indices]
-                        
-                        for k in range(hits):
-                            row = base_row.copy()
-                            row.update({
-                                'bump_start_date': pd.Timestamp(dates_start[k]),
-                                'bump_end_date': pd.Timestamp(dates_bump_end[k]),
-                                'slide_start_date': pd.Timestamp(dates_slide_start[k]),
-                                'slide_end_date': pd.Timestamp(dates_slide_end[k]),
-                                'bump_change': float(val_b_change[k]),
-                                'slide_change': float(val_s_change[k]),
-                                'bump_vol': float(val_b_vol[k]),
-                                'slide_vol': float(val_s_vol[k]),
-                                'bump_up_pct_actual': float(val_b_up[k]),
-                                'slide_up_pct_actual': float(val_s_up[k]),
-                                'is_true_hit': hits_indices[k] in true_hit_set,
-                                'data_gap': bool(is_gap[k])
-                            })
-                            local_res.append(row)
-                    else:
-                        local_res.append(base_row)
+                        # Year Summary for True Hits
+                        hit_dates = pd.to_datetime(self.dates_raw[kept_indices])
+                        hits_per_year = hit_dates.year.value_counts().sort_index().to_dict()
+                        hits_per_year = {str(k): int(v) for k, v in hits_per_year.items()}
+                        hits_per_year_json = json.dumps(hits_per_year)
+
+                    # Store
+                    base_row = {
+                        'bump_len': bump_len,
+                        'slide_len': slide_len,
+                        'bump_threshold': float(bt),
+                        'min_bump_vol': int(bv),
+                        'bump_up_pct': float(bu),
+                        'slide_threshold': float(st),
+                        'min_slide_vol': int(sv),
+                        'slide_up_pct': float(su),
+                        'total_bumps': int(total_bumps),
+                        'total_hits': int(hits),
+                        'true_hits': int(true_hits),
+                        'hits': int(hits), # Alias for Total Hits
+                    }
+                    
+                    if hits > 0 or total_bumps > 0:
+                        if hits > 0:
+                            base_row['best_hit_date'] = best_hit_date
+                            base_row['hits_per_year'] = hits_per_year_json
+                            
+                        if detailed and hits > 0:
+                            hits_indices = raw_hit_indices
+                            dates_start = self.dates_raw[hits_indices]
+                            dates_bump_end = self.dates_raw[hits_indices + bump_len - 1]
+                            dates_slide_start = self.dates_raw[hits_indices + bump_len]
+                            dates_slide_end = self.dates_raw[hits_indices + bump_len + slide_len - 1]
+                            
+                            one_min = np.timedelta64(1, 'm')
+                            gaps = dates_slide_start - dates_bump_end
+                            is_gap = gaps > one_min
+                            
+                            val_b_change = b_change[hits_indices]
+                            val_s_change = s_change[hits_indices]
+                            val_b_vol = b_vol[hits_indices]
+                            val_s_vol = s_vol[hits_indices]
+                            val_b_up = b_up_pct[hits_indices]
+                            val_s_up = s_up_pct[hits_indices]
+                            
+                            for k in range(hits):
+                                row = base_row.copy()
+                                row.update({
+                                    'bump_start_date': pd.Timestamp(dates_start[k]),
+                                    'bump_end_date': pd.Timestamp(dates_bump_end[k]),
+                                    'slide_start_date': pd.Timestamp(dates_slide_start[k]),
+                                    'slide_end_date': pd.Timestamp(dates_slide_end[k]),
+                                    'bump_change': float(val_b_change[k]),
+                                    'slide_change': float(val_s_change[k]),
+                                    'bump_vol': float(val_b_vol[k]),
+                                    'slide_vol': float(val_s_vol[k]),
+                                    'bump_up_pct_actual': float(val_b_up[k]),
+                                    'slide_up_pct_actual': float(val_s_up[k]),
+                                    'is_true_hit': hits_indices[k] in true_hit_set,
+                                    'data_gap': bool(is_gap[k])
+                                })
+                                local_res.append(row)
+                        else:
+                            local_res.append(base_row)
                         
             return local_res
 
@@ -203,21 +247,19 @@ class CatalogSearcher:
         print(f"Executing search with {max_workers} threads...")
         
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            future_to_struct = {
-                executor.submit(process_structure, b, s): (b, s)
-                for b, s in struct_combos
-            }
+            future_to_struct = {}
+            for i, (b, s) in enumerate(struct_combos):
+                start_pct = i / total_structs
+                end_pct = (i+1) / total_structs
+                future = executor.submit(process_structure, b, s, sub_progress_start=start_pct, sub_progress_end=end_pct)
+                future_to_struct[future] = (b, s)
             
             completed_count = 0
-            # Report roughly every 10% or at least every item if count is small
-            report_every = max(1, total_structs // 10)
             
             for future in as_completed(future_to_struct):
                 completed_count += 1
-                should_report = (completed_count % report_every == 0) or (completed_count == total_structs)
-                
-                if progress_callback and should_report:
-                     progress_callback(f"Processed {completed_count}/{total_structs}", completed_count/total_structs)
+                if progress_callback:
+                     progress_callback(f"Processed structure {completed_count}/{total_structs}", completed_count/total_structs)
                 
                 try:
                     res = future.result()
@@ -233,6 +275,11 @@ class CatalogSearcher:
         return df_res
 
     def _add_cli_commands(self, df_results):
+        # Do not generate commands if fast_mode was used, as results are incomplete
+        if 'fast_mode_hit' in df_results.columns:
+            df_results['cli_command'] = "NA (fast_mode)"
+            return
+
         range_mapping = {
             'bump_len': 'bump-len', 'slide_len': 'slide-len', 'min_bump_vol': 'bump-vol',
             'min_slide_vol': 'slide-vol', 'bump_up_pct': 'bump-up', 'slide_up_pct': 'slide-up'
@@ -245,10 +292,10 @@ class CatalogSearcher:
             for key, cli_arg in range_mapping.items():
                 val = res.get(key)
                 if val is not None:
-                    parts.append(f"--{cli_arg}-start {val} --{cli_arg}-end {val} --{cli_arg}-step 0")
+                    parts.append(f"--{cli_arg}-start {int(val)} --{cli_arg}-end {int(val)} --{cli_arg}-step 0")
             for key, cli_arg in single_mapping.items():
                 val = res.get(key)
                 if val is not None:
-                    parts.append(f"--{cli_arg} {val}")
+                    parts.append(f"--{cli_arg} {float(val):.2f}")
             commands.append(" ".join(parts))
         df_results['cli_command'] = commands

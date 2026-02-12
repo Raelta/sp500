@@ -29,6 +29,8 @@ def run_job():
     min_bumps = config.get("min_bumps", 0)
     user_label = config.get("user_label", "unknown")
     output_path = config.get("output_path", "/tmp/results.csv")
+    fast_mode = config.get("fast_mode", False)
+    max_combinations = config.get("max_combinations", None)
     
     # --- SEARCH ENGINE SELECTION ---
     # Check if pre-built catalog exists (Use env var for mount point)
@@ -66,7 +68,9 @@ def run_job():
     results = seeker.search(
         params_grid,
         min_bumps=min_bumps,
-        progress_callback=progress
+        progress_callback=progress,
+        fast_mode=fast_mode,
+        max_combinations=max_combinations
     )
     end_time = time.time()
     duration_sec = end_time - start_time
