@@ -44,8 +44,7 @@ def test_cli_execution_sanity():
     cmd = [
         "python", "goal_seek_cli.py",
         "--bump-len-start", "5", "--bump-len-end", "5", "--bump-len-step", "0",
-        "--bump-thresh-start", "0.1", "--bump-thresh-end", "0.1", "--bump-thresh-step", "0",
-        "--target-cr", "0",
+        "--min-bump-threshold", "0.1",
         "--top-n", "1",
         "--output", "test_output.csv"
     ]
