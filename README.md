@@ -19,6 +19,9 @@ A Python application designed to analyze intraday SPY (S&P 500 ETF) data for "Bu
 - **Smart Filtering**: 
   - Excel-style "Select All" filters for Years and Days of the Week.
   - Filter by Volume, Time of Day, and Days.
+- **Secure Access**:
+  - Simple login system to restrict access.
+  - Persistent sessions via cookies (no need to login every time).
 
 ## Installation
 
@@ -45,6 +48,12 @@ streamlit run app.py
 
 *   **Exploration Mode**: Manually adjust parameters and visualize patterns on a chart.
 *   **Goal Seek Mode**: Enter ranges for parameters and find the best performing configurations.
+
+### Authentication
+
+Upon first visit, you will be prompted to log in.
+- **Username**: Enter your name (this will be used to tag your cloud jobs).
+- **Password**: Configured in `.streamlit/secrets.toml`.
 
 ### Goal Seek CLI
 
@@ -183,7 +192,16 @@ These tests verify helper functions and utility logic.
 | `test_get_change_labels` | Verify UI label generation. | Ensure correct units (% or value) are returned based on threshold type. |
 | `test_parse_job_config` | Verify config parsing. | Check that JSON strings (with or without gcloud escape characters) are parsed correctly. |
 
-### 3. Property-Based Tests (`tests/test_properties.py`)
+### 3. Authentication Tests (`tests/test_auth.py`)
+Verify the login logic and session management.
+
+| Test Function | Purpose | Methodology |
+| :--- | :--- | :--- |
+| `test_hash_token_consistency` | Verify token generation. | Ensure hashing is deterministic and unique. |
+| `test_check_password_cookie_login` | Verify auto-login. | Mock cookie manager to simulate a returning user and assert session is restored. |
+| `test_logout` | Verify logout. | Ensure cookies and session state are cleared upon logout. |
+
+### 4. Property-Based Tests (`tests/test_properties.py`)
 These tests use the `hypothesis` library to generate thousands of random inputs ("fuzzing") to verify system stability and logical invariants.
 
 | Test Function | Purpose | Methodology |

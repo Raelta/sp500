@@ -10,3 +10,4 @@ google-cloud-storage
 google-cloud-logging
 playwright
 psutil
+extra-streamlit-components

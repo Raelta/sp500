@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-02-13
+### Added
+- **Authentication System**: Simple login screen (Password managed via `secrets.toml`) to restrict access.
+- **Persistent Sessions**: Uses secure cookies to keep users logged in across visits (via `extra-streamlit-components`).
+- **User Identity**: Automatically tags cloud jobs with the logged-in username, removing the manual text input.
+- **Logout**: Added "Log Out" button to the sidebar.
+
 ## [0.3.0] - 2026-02-12
 
 ### Added

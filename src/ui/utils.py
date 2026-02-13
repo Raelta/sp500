@@ -190,3 +190,11 @@ def get_change_labels(bump_type, slide_type):
     slide_suffix = "%" if slide_type == 'percent' else ""
     
     return bump_label, slide_label, bump_suffix, slide_suffix
+
+def render_version_info():
+    """
+    Renders the app version info in the sidebar.
+    """
+    ver = get_app_version()
+    st.sidebar.markdown(f"**Version:** v0.1.{ver['count']} ({ver['hash']})")
+    st.sidebar.markdown("**Built by Raelta**")

@@ -4,7 +4,7 @@ import numpy as np
 import time
 from datetime import datetime, timedelta
 from src.search_engine import GoalSeeker
-from src.ui.utils import log_perf, derive_result_blob_name
+from src.ui.utils import log_perf, derive_result_blob_name, render_version_info
 from src.cloud_runner import CloudRunner
 from src.analyzer import find_bumps_and_slides
 from src.ui.results import render_results
@@ -97,7 +97,12 @@ def render_goal_seek(df, cli_args, val_report):
                 gcp_region = st.text_input("Region", value="europe-west2", key="gs_gcp_region")
                 gcp_job_name = st.text_input("Job Name", value="sp500-goal-seek", key="gs_gcp_job_name")
                 gcp_bucket = st.text_input("GCS Bucket", value="sp500-goal-seek-results", key="gs_gcp_bucket")
-                gcp_user_label = st.text_input("User / Run Label", value="user", key="gs_gcp_user_label", help="Identifier for who is running this job. Used in filenames.")
+                
+                # Use authenticated username
+                user_label = st.session_state.get("username", "user")
+                st.info(f"Running as: **{user_label}**")
+
+        render_version_info()
 
     # --- MAIN CONTENT ---
 
@@ -130,7 +135,7 @@ def render_goal_seek(df, cli_args, val_report):
                 st.session_state.current_cloud_run_id = run_id
                 
                 # Sanitize user label
-                safe_label = "".join([c for c in gcp_user_label if c.isalnum() or c in ('-', '_')]).strip()
+                safe_label = "".join([c for c in user_label if c.isalnum() or c in ('-', '_')]).strip()
                 if not safe_label: safe_label = "user"
                 
                 result_blob = f"results_{safe_label}_{run_id}.csv"
@@ -190,7 +195,9 @@ def render_goal_seek(df, cli_args, val_report):
                      if status == "SUCCEEDED":
                         target = None
                         if st.session_state.get('current_cloud_run_id'):
-                             safe_label = "".join([c for c in gcp_user_label if c.isalnum() or c in ('-', '_')]).strip()
+                             # Use authenticated username for label
+                             current_user = st.session_state.get("username", "user")
+                             safe_label = "".join([c for c in current_user if c.isalnum() or c in ('-', '_')]).strip()
                              if not safe_label: safe_label = "user"
                              target = f"results_{safe_label}_{st.session_state.current_cloud_run_id}.csv"
                         else:

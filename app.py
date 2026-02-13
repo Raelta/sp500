@@ -8,10 +8,15 @@ from src.ui.utils import log_perf, inject_compact_sidebar_style
 from src.ui.exploration import render_exploration
 from src.ui.goal_seek import render_goal_seek
 from src.ui.help import render_help_page, get_preferences
+from src.ui.auth import check_password
 
 # Setup
 st.set_page_config(page_title="SP500 Bump & Slide", layout="wide")
 inject_compact_sidebar_style()
+
+# Authentication
+if not check_password():
+    st.stop()
 
 # Help Logic
 if 'show_help' not in st.session_state:

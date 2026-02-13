@@ -4,8 +4,13 @@ import pytest
 def test_app_analysis_flow():
     # Load app
     at = AppTest.from_file("app.py", default_timeout=30)
-    at.run()
     
+    # Pre-authenticate to bypass login screen
+    at.session_state["authenticated"] = True
+    at.session_state["username"] = "testuser"
+    
+    at.run()
+
     # Handle Help Page if open
     if len(at.header) > 0 and "Help & Information" in at.header[0].value:
         # Find close button
