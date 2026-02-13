@@ -6,8 +6,21 @@ def test_app_analysis_flow():
     at = AppTest.from_file("app.py", default_timeout=30)
     at.run()
     
-    # Check title
-    assert "SP500 Bump & Slide Analysis" in at.title[0].value
+    # Handle Help Page if open
+    if len(at.header) > 0 and "Help & Information" in at.header[0].value:
+        # Find close button
+        close_btn = None
+        for btn in at.button:
+            if "Close Help" in btn.label:
+                close_btn = btn
+                break
+        if close_btn:
+            close_btn.click()
+            at.run()
+
+    # Check title (Subheader in Goal Seek mode)
+    assert len(at.subheader) > 0
+    assert "Goal Seek" in at.subheader[0].value
     
     # Check data loaded success
     assert not at.exception

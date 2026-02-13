@@ -41,8 +41,6 @@ def render_sidebar(df, cli_args):
     # Get previously applied config if it exists
     applied = st.session_state.get('applied_config', {})
 
-    st.sidebar.header("Configuration")
-
     # BUMP TYPE
     bt_default = applied.get('bump_thresh_type', 'percent')
     bt_idx = 0 if bt_default == "percent" else 1
@@ -74,7 +72,6 @@ def render_sidebar(df, cli_args):
         s_label = "Slide Thresh (Diff)"
 
     # --- BUMP PARAMETERS ---
-    st.sidebar.markdown("---")
     st.sidebar.subheader("Bump Parameters")
     b_len_default = applied.get('bump_len', cli_args.bump_len if cli_args.bump_len is not None else 5)
     bump_len = render_time_input("Bump Size", b_len_default, "sb_bump_size")
@@ -87,7 +84,6 @@ def render_sidebar(df, cli_args):
         bump_up_pct = st.number_input("Min % Up", min_value=0.0, max_value=100.0, value=float(b_up_default), step=5.0, key="sb_bump_up_pct")
 
     # --- SLIDE PARAMETERS ---
-    st.sidebar.markdown("---")
     st.sidebar.subheader("Slide Parameters")
     s_len_default = applied.get('slide_len', cli_args.slide_len if cli_args.slide_len is not None else 3)
     slide_len = render_time_input("Slide Size", s_len_default, "sb_slide_size")
@@ -100,7 +96,6 @@ def render_sidebar(df, cli_args):
         slide_up_pct = st.number_input("Min % Up", min_value=0.0, max_value=100.0, value=float(s_up_default), step=5.0, key="sb_slide_up_pct")
 
     # --- FILTERS ---
-    st.sidebar.markdown("---")
     st.sidebar.subheader("Filters")
     mbv_default = applied.get('min_bump_vol', cli_args.min_bump_vol if cli_args.min_bump_vol is not None else 0)
     msv_default = applied.get('min_slide_vol', cli_args.min_slide_vol if cli_args.min_slide_vol is not None else 0)
@@ -133,7 +128,6 @@ def render_sidebar(df, cli_args):
     days_options = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
     days = render_checkbox_dropdown("Days of Week", days_options, "filter_day")
 
-    st.sidebar.markdown("---")
     # --- APP LAYOUT ---
     lo_default = applied.get('layout_order', "Table Top")
     lo_idx = 0 if lo_default == "Table Top" else 1
@@ -143,9 +137,9 @@ def render_sidebar(df, cli_args):
         if 'perf_logs' in st.session_state:
             st.code("\n".join(st.session_state.perf_logs))
 
-    st.sidebar.divider()
     ver = get_app_version()
     st.sidebar.markdown(f"**Version:** v0.1.{ver['count']} ({ver['hash']})")
+    st.sidebar.markdown("**Built by Raelta**")
     
     return {
         'bump_len': bump_len,

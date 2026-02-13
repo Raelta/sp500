@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from src.search_engine import GoalSeeker
 from src.ui.utils import log_perf, derive_result_blob_name
 from src.cloud_runner import CloudRunner
@@ -54,7 +54,6 @@ def generate_grid_from_ui(params):
 def render_goal_seek(df, cli_args, val_report):
     # --- SIDEBAR INPUTS ---
     with st.sidebar:
-        st.header("Goal Seek Parameters")
         gs_params = {}
         
         # Lengths (Compact Mode)
@@ -64,16 +63,12 @@ def render_goal_seek(df, cli_args, val_report):
         s_len_start, s_len_end, s_len_step = render_range_input("Slide Length (min)", 1, 2880, 3, 6, 1, "gs_s_len", compact=True)
         gs_params['slide_len'] = (s_len_start, s_len_end, s_len_step)
         
-        st.markdown("---")
-        
         # Thresholds (Side by side)
         col_th1, col_th2 = st.columns(2)
         with col_th1:
             min_b_thresh = st.number_input("Min Bump Thresh %", value=3.0, step=0.1, key="gs_min_b_thresh")
         with col_th2:
             min_s_thresh = st.number_input("Min Slide Thresh %", value=3.0, step=0.1, key="gs_min_s_thresh")
-        
-        st.markdown("---")
         
         # Advanced Parameters Expander
         with st.expander("Advanced parameters", expanded=False):
@@ -93,8 +88,6 @@ def render_goal_seek(df, cli_args, val_report):
 
             min_bumps_req = st.number_input("Min Bumps Req", value=0, step=1)
         
-        st.markdown("---")
-        
         # Execution
         run_cloud = st.checkbox("☁️ Cloud Run", value=True)
         
@@ -107,7 +100,6 @@ def render_goal_seek(df, cli_args, val_report):
                 gcp_user_label = st.text_input("User / Run Label", value="user", key="gs_gcp_user_label", help="Identifier for who is running this job. Used in filenames.")
 
     # --- MAIN CONTENT ---
-    st.title("Goal Seek")
 
     # Prepare Config Grid
     grid = generate_grid_from_ui(gs_params)
@@ -129,7 +121,7 @@ def render_goal_seek(df, cli_args, val_report):
     if run_cloud:
         runner = CloudRunner(project_id=gcp_project, region=gcp_region)
         
-        col1, col2, col3 = st.columns(3)
+        col1, col2 = st.columns(2)
         
         with col1:
             if st.button("🚀 Trigger Cloud Search", type="primary", use_container_width=True):
@@ -226,6 +218,36 @@ def render_goal_seek(df, cli_args, val_report):
 
                      # Fetch metadata blobs (Completed jobs)
                      blobs = runner.list_blobs(gcp_bucket, prefix="metadata_")
+
+                     # Fetch recent executions to check for failures
+                     recent_execs = runner.list_recent_executions(gcp_job_name, limit=50)
+                     
+                     def find_matching_execution(sub_ts_iso):
+                         try:
+                             if not sub_ts_iso: return None
+                             # sub_ts_iso is from datetime.now().isoformat()
+                             sub_dt = datetime.fromisoformat(sub_ts_iso)
+                             sub_ts = sub_dt.timestamp()
+                             
+                             best_match = None
+                             min_diff = float('inf')
+                             
+                             for exc in recent_execs:
+                                 # exc['create_time'] is a datetime object
+                                 exec_dt = exc['create_time']
+                                 exec_ts = exec_dt.timestamp()
+                                 
+                                 diff = abs(exec_ts - sub_ts)
+                                 
+                                 # 2 minutes tolerance to account for clock skew and startup time
+                                 if diff < 120: 
+                                     if diff < min_diff:
+                                         min_diff = diff
+                                         best_match = exc
+                             
+                             return best_match
+                         except Exception:
+                             return None
                      
                      combined_history = []
                      seen_run_ids = set()
@@ -260,6 +282,12 @@ def render_goal_seek(df, cli_args, val_report):
                      for item in sub_hist:
                          if item['run_id'] not in seen_run_ids:
                              item['status'] = 'SUBMITTED'
+                             
+                             # Check actual cloud status
+                             match = find_matching_execution(item.get('timestamp'))
+                             if match:
+                                 item['status'] = match['status']
+                             
                              item['total_results'] = '-' # Placeholder
                              item['duration_sec'] = 0
                              combined_history.append(item)
@@ -268,32 +296,7 @@ def render_goal_seek(df, cli_args, val_report):
                      combined_history.sort(key=lambda x: x.get('timestamp', ''), reverse=True)
                      st.session_state.run_history = combined_history
 
-        with col3:
-            if st.button("📥 Download & Summarize", use_container_width=True):
-                # Determine target file
-                target = None
-                if st.session_state.get('current_cloud_run_id'):
-                     safe_label = "".join([c for c in gcp_user_label if c.isalnum() or c in ('-', '_')]).strip()
-                     if not safe_label: safe_label = "user"
-                     target = f"results_{safe_label}_{st.session_state.current_cloud_run_id}.csv"
-                else:
-                    target = "results.csv" # Fallback if no specific run ID known
-                
-                with st.spinner(f"Downloading {target}..."):
-                    local_path = "cloud_results.csv"
-                    success, msg = runner.download_results(gcp_bucket, target, local_path)
-                    if success:
-                        try:
-                            df_res = pd.read_csv(local_path)
-                            st.session_state.gs_results = df_res
-                            st.success(f"Downloaded {len(df_res)} results.")
-                        except Exception as e:
-                            st.error(f"Failed to parse CSV: {e}")
-                    else:
-                        st.error(msg)
-
         # --- RUN HISTORY ---
-        st.divider()
         with st.expander("📂 Cloud Run History", expanded=False):
              if 'run_history' in st.session_state and st.session_state.run_history:
                  # Display Table
@@ -338,6 +341,7 @@ def render_goal_seek(df, cli_args, val_report):
                          "Actual Time": act_str,
                          "Configs": str(h.get('total_configs', '-')),
                          "Results": str(h.get('total_results', 'N/A')),
+                         "Max Conf": f"{h.get('max_confidence', 0):.2f}%" if h.get('max_confidence') else "-",
                          "_blob": h.get('result_blob') # Hidden column
                      })
                  
@@ -352,7 +356,8 @@ def render_goal_seek(df, cli_args, val_report):
                      use_container_width=True,
                      on_select="rerun",
                      selection_mode="single-row",
-                     hide_index=True
+                     hide_index=True,
+                     key="cloud_history_table"
                  )
                  
                  if len(event.selection.rows) > 0:
@@ -373,7 +378,6 @@ def render_goal_seek(df, cli_args, val_report):
                                      st.session_state.gs_results = df_res
                                      st.session_state.last_loaded_blob = blob_name
                                      st.success(f"Loaded {len(df_res)} results.")
-                                     st.rerun()
                                  except Exception as e:
                                      st.error(f"Failed to parse CSV: {e}")
                              else:

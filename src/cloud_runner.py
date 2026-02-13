@@ -203,6 +203,52 @@ class CloudRunner:
         except Exception as e:
             return None, self._handle_error(e, job_path)
 
+    def list_recent_executions(self, job_name, limit=20):
+        """
+        Lists the most recent executions for a given job.
+        Returns a list of dicts with id, status, create_time.
+        """
+        ok, msg = self.check_credentials()
+        if not ok:
+            return []
+
+        parent = f"projects/{self.project_id}/locations/{self.region}"
+        job_path = f"{parent}/jobs/{job_name}"
+        
+        try:
+            # List executions, sorted by start time descending
+            request = run_v2.ListExecutionsRequest(
+                parent=job_path,
+                page_size=limit
+            )
+            page = self.exec_client.list_executions(request=request)
+            
+            executions_list = []
+            for exc in page:
+                # Simplify status
+                status = "UNKNOWN"
+                if exc.reconciling:
+                    status = "RUNNING"
+                elif exc.succeeded_count > 0:
+                    status = "SUCCEEDED"
+                elif exc.failed_count > 0:
+                    status = "FAILED"
+                else:
+                    status = "PENDING"
+                
+                executions_list.append({
+                    "id": exc.name.split("/")[-1],
+                    "status": status,
+                    "create_time": exc.create_time,
+                    "completion_time": exc.completion_time
+                })
+            
+            return executions_list
+            
+        except Exception as e:
+            # st.warning(f"Failed to list executions: {e}")
+            return []
+
     def run_job(self, job_name, config_dict):
         """
         Triggers a Cloud Run Job using execution overrides.

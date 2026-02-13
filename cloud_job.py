@@ -82,8 +82,19 @@ def run_job():
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Search complete. Found {len(results)} results in {duration_sec:.2f} seconds.")
     
     # Inject metadata into results for UI verification
+    max_confidence = 0.0
     if not results.empty:
         results['optimization_mode'] = optimization_mode
+        
+        # Calculate Max Confidence for Metadata
+        if 'total_hits' in results.columns and 'total_bumps' in results.columns:
+            # Avoid division by zero
+            temp_conf = results.apply(
+                lambda x: (x['total_hits'] / x['total_bumps'] * 100) if x['total_bumps'] > 0 else 0.0, axis=1
+            )
+            # Add to results dataframe as well so it's in the CSV
+            results['confidence'] = temp_conf
+            max_confidence = temp_conf.max()
     
     # Always save a file to avoid 404s on the client side
     results.to_csv(output_path, index=False)
@@ -123,6 +134,7 @@ def run_job():
                         "min_bumps": min_bumps,
                         "result_blob": blob_name,
                         "total_results": len(results),
+                        "max_confidence": max_confidence,
                         "optimization_mode": optimization_mode,
                         "duration_sec": duration_sec,
                         "memory_mb": psutil.Process(os.getpid()).memory_info().rss / 1024 / 1024
