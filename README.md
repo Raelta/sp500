@@ -53,7 +53,7 @@ streamlit run app.py
 
 Upon first visit, you will be prompted to log in.
 - **Username**: Enter your name (this will be used to tag your cloud jobs).
-- **Password**: Configured in `.streamlit/secrets.toml`.
+- **Password**: Configured in `.streamlit/secrets.toml` (or `APP_PASSWORD` env var).
 
 ### Goal Seek CLI
 

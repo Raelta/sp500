@@ -137,3 +137,30 @@ def test_check_password_form_submit_valid(mock_get_manager, mock_st):
     assert mock_st.session_state["username"] == "testuser"
     mock_st.success.assert_called_once()
     mock_manager.set.call_count == 2
+
+@patch("src.ui.auth.st")
+@patch("src.ui.auth.get_manager")
+def test_check_password_env_var_fallback(mock_get_manager, mock_st):
+    """Test login using environment variable when secrets are missing."""
+    # Setup
+    mock_st.session_state = {}
+    mock_manager = MagicMock()
+    mock_get_manager.return_value = mock_manager
+    mock_manager.get.return_value = None
+    
+    # Mock secrets raising KeyError (empty secrets)
+    mock_st.secrets = {}
+    
+    # Mock inputs
+    mock_st.text_input.side_effect = ["testuser", "env_password"]
+    mock_st.form_submit_button.return_value = True
+    
+    # Mock environment variable
+    import os
+    with patch.dict(os.environ, {"APP_PASSWORD": "env_password"}):
+        # Execute
+        check_password()
+    
+    # Verify
+    assert mock_st.session_state["authenticated"] is True
+    mock_st.success.assert_called_once()

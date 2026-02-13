@@ -3,6 +3,7 @@ import extra_streamlit_components as stx
 import hashlib
 import time
 import datetime
+import os
 
 SALT = "sp500_secure_salt_v1"
 
@@ -47,14 +48,21 @@ def check_password():
         submitted = st.form_submit_button("Login")
 
         if submitted:
-            # Retrieve password from secrets
+            # Retrieve password from secrets or environment variable
+            correct_password = None
+            
+            # 1. Try Secrets (local dev)
             try:
                 correct_password = st.secrets["password"]
             except (KeyError, FileNotFoundError):
-                # Fallback for local dev if secrets not set, or show error
-                # User requested NO plaintext password in repo.
-                # So we must fail if secrets are missing.
-                st.error("System Configuration Error: Password not set in secrets.")
+                pass
+            
+            # 2. Try Environment Variable (cloud deployment)
+            if not correct_password:
+                correct_password = os.environ.get("APP_PASSWORD")
+
+            if not correct_password:
+                st.error("System Configuration Error: Password not set in secrets or APP_PASSWORD env var.")
                 return False
 
             if password == correct_password:
