@@ -9,6 +9,7 @@ from src.ui.exploration import render_exploration
 from src.ui.goal_seek import render_goal_seek
 from src.ui.help import render_help_page, get_preferences
 from src.ui.auth import check_password
+from src.ui.layout import render_footer
 
 # Setup
 st.set_page_config(page_title="SP500 Bump & Slide", layout="wide")
@@ -64,21 +65,18 @@ has_issues = (val_report['duplicates']['count'] > 0) or \
 if val_report['duplicates']['count'] > 0:
     df = df.drop_duplicates(subset=['date'], keep='first').reset_index(drop=True)
 
-# --- Navigation ---
-# Bind radio directly to session state key. 
-# st.session_state.app_mode is initialized to "Goal Seek" above.
-st.sidebar.radio(
-    "Select Mode", 
-    ["Exploration", "Goal Seek"], 
-    key="app_mode"
-)
+# --- Top Bar & Navigation ---
+col_nav, col_gap, col_dq, col_help = st.columns([0.6, 0.2, 0.1, 0.1])
 
-# --- Top Bar ---
-col_header, col_gap, col_dq, col_help = st.columns([0.6, 0.2, 0.1, 0.1])
-
-with col_header:
-    if st.session_state.app_mode == "Goal Seek":
-        st.subheader("Goal Seek")
+with col_nav:
+    # Top-level navigation (Tabbed appearance)
+    st.radio(
+        "Select Mode", 
+        ["Exploration", "Goal Seek"], 
+        key="app_mode",
+        horizontal=True,
+        label_visibility="collapsed"
+    )
 
 with col_dq:
     if has_issues:
@@ -127,6 +125,8 @@ if st.session_state.app_mode == "Exploration":
     render_exploration(df, cli_args, val_report)
 else:
     render_goal_seek(df, cli_args, val_report)
+
+render_footer()
 
 t_end = time_module.time()
 log_perf("Script Execution Complete", t0)

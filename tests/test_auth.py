@@ -35,8 +35,8 @@ def test_check_password_already_authenticated(mock_get_manager, mock_st):
     
     # Verify
     assert result is True
-    # Should check session state first
-    mock_get_manager.assert_called_once()
+    # Should check session state first, and NOT call get_manager (lazy load)
+    mock_get_manager.assert_not_called()
 
 @patch("src.ui.auth.st")
 @patch("src.ui.auth.get_manager")

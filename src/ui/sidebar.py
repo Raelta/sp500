@@ -1,7 +1,6 @@
 import streamlit as st
 from datetime import time
 from src.ui.utils import render_checkbox_dropdown, get_app_version, render_version_info
-from src.ui.auth import render_logout_button
 
 def render_time_input(label, default_minutes, key_prefix):
     """
@@ -32,8 +31,6 @@ def render_sidebar(df, cli_args):
     """
     
     # Global Controls
-    render_logout_button()
-    
     if st.sidebar.button("🔄 Reload Data", help="Clear cache and force reload from disk", use_container_width=True):
         st.cache_data.clear()
         for key in ['results', 'selected_match_idx', 'preselected_done', 'stats', 'applied_config']:
@@ -140,8 +137,6 @@ def render_sidebar(df, cli_args):
         if 'perf_logs' in st.session_state:
             st.code("\n".join(st.session_state.perf_logs))
 
-    render_version_info()
-    
     return {
         'bump_len': bump_len,
         'bump_threshold': bump_threshold,

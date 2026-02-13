@@ -18,12 +18,12 @@ def check_password():
     Returns True if the user is authenticated, False otherwise.
     If not authenticated, renders the login form.
     """
-    # Initialize cookie manager
-    cookie_manager = get_manager()
-
     # 1. Check Session State (fastest, current session)
     if st.session_state.get("authenticated", False):
         return True
+
+    # Initialize cookie manager
+    cookie_manager = get_manager()
 
     # 2. Check Cookies (persistence across reloads)
     # We need to wait a moment for cookies to be readable on first load sometimes,
@@ -110,5 +110,6 @@ def logout():
     st.rerun()
 
 def render_logout_button():
-    if st.sidebar.button("Log Out"):
+    # Render standard button (caller determines placement)
+    if st.button("Log Out", key="auth_logout_btn"):
         logout()

@@ -68,8 +68,11 @@ def test_cloud_history_selection_no_rerun():
     ]
     mock_st.checkbox.return_value = True
     
-    # Patch sys.modules to inject mock streamlit
-    with patch.dict(sys.modules, {'streamlit': mock_st}):
+    # Mock src.cloud_runner to prevent google imports
+    mock_cloud_runner_mod = MagicMock()
+
+    # Patch sys.modules to inject mock streamlit and cloud_runner
+    with patch.dict(sys.modules, {'streamlit': mock_st, 'src.cloud_runner': mock_cloud_runner_mod}):
         # We need to reload src.ui.goal_seek because it has likely already been imported
         # by other tests or logic with the real streamlit.
         # We delete it from sys.modules to force a fresh import that uses our mock.
@@ -175,7 +178,10 @@ def test_cloud_history_selection_with_key():
         {'run_id': 'run1', 'timestamp': '2023-01-01T10:00:00', 'status': 'COMPLETED', 'result_blob': 'blob1', 'user_label': 'test'}
     ]
     
-    with patch.dict(sys.modules, {'streamlit': mock_st}):
+    # Mock src.cloud_runner to prevent google imports
+    mock_cloud_runner_mod = MagicMock()
+
+    with patch.dict(sys.modules, {'streamlit': mock_st, 'src.cloud_runner': mock_cloud_runner_mod}):
         if 'src.ui.goal_seek' in sys.modules:
             del sys.modules['src.ui.goal_seek']
             
