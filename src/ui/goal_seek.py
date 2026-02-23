@@ -51,6 +51,48 @@ def generate_grid_from_ui(params):
         grid[key] = vals
     return grid
 
+def format_params_grid(grid):
+    if not grid:
+        return "-"
+    
+    parts = []
+    # Prioritize key params
+    order = ['bump_len', 'slide_len', 'bump_threshold', 'slide_threshold']
+    
+    # 1. Add prioritized keys
+    for k in order:
+        if k in grid:
+            vals = grid[k]
+            if isinstance(vals, list):
+                if len(vals) > 1:
+                    try:
+                        # Try to detect range
+                        v_sorted = sorted(list(set(vals)))
+                        # check if int-like range
+                        if all(isinstance(x, (int, float)) and x == int(x) for x in v_sorted):
+                            v_ints = [int(x) for x in v_sorted]
+                            if len(v_ints) > 2 and v_ints == list(range(min(v_ints), max(v_ints)+1)):
+                                val_str = f"{min(v_ints)}-{max(v_ints)}"
+                            else:
+                                # Start..End
+                                val_str = f"{min(v_ints)}..{max(v_ints)}"
+                        else:
+                            val_str = f"{min(vals)}..{max(vals)}"
+                    except:
+                        val_str = f"{len(vals)} vals"
+                elif len(vals) == 1:
+                    val_str = str(vals[0])
+                else:
+                    val_str = ""
+            else:
+                val_str = str(vals)
+            
+            # Shorten keys
+            short_k = k.replace("bump", "B").replace("slide", "S").replace("threshold", "Th").replace("len", "L")
+            parts.append(f"{short_k}:{val_str}")
+            
+    return " | ".join(parts)
+
 def render_goal_seek(df, cli_args, val_report):
     # --- SIDEBAR INPUTS ---
     with st.sidebar:
@@ -164,7 +206,9 @@ def render_goal_seek(df, cli_args, val_report):
                                 "timestamp": datetime.now().isoformat(),
                                 "user_label": safe_label,
                                 "total_configs": total_configs,
-                                "est_time_mins": est_time_mins
+                                "est_time_mins": est_time_mins,
+                                "params_grid": grid,
+                                "fixed_params": fixed_params
                             })
                             # Keep last 100
                             if len(history) > 100: history = history[-100:]
@@ -338,6 +382,10 @@ def render_goal_seek(df, cli_args, val_report):
                      # Actual Duration
                      dur_sec = h.get('duration_sec', 0)
                      act_str = f"{dur_sec:.1f}s" if dur_sec > 0 else "-"
+                     
+                     # Params Summary
+                     p_grid = h.get('params_grid')
+                     p_summary = format_params_grid(p_grid)
 
                      hist_data.append({
                          "Run Time": ts_fmt,
@@ -347,6 +395,7 @@ def render_goal_seek(df, cli_args, val_report):
                          "Est. Time": est_str,
                          "Actual Time": act_str,
                          "Configs": str(h.get('total_configs', '-')),
+                         "Params": p_summary,
                          "Results": str(h.get('total_results', 'N/A')),
                          "Max Conf": f"{h.get('max_confidence', 0):.2f}%" if h.get('max_confidence') else "-",
                          "_blob": h.get('result_blob') # Hidden column
@@ -372,6 +421,16 @@ def render_goal_seek(df, cli_args, val_report):
                      selected_run = df_hist.iloc[idx]
                      blob_name = selected_run['_blob']
                      
+                     # Display Params Detail
+                     # Map back to original history item (df_hist preserves order)
+                     if idx < len(st.session_state.run_history):
+                         orig_item = st.session_state.run_history[idx]
+                         p_grid = orig_item.get('params_grid')
+                         f_params = orig_item.get('fixed_params')
+                         if p_grid:
+                             with st.expander("ℹ️ Search Parameters", expanded=False):
+                                 st.json({"grid": p_grid, "fixed": f_params})
+
                      # Check if we need to load (avoid reload loop)
                      if not blob_name or pd.isna(blob_name):
                          st.warning("This job is submitted but results are not yet available (or it failed).")
