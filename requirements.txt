@@ -11,3 +11,4 @@ google-cloud-logging
 playwright
 psutil
 extra-streamlit-components
+requests

@@ -7,6 +7,7 @@ JOB_NAME="sp500-goal-seek"
 IMAGE_NAME="sp500-analyzer"
 IMAGE_URI="gcr.io/$PROJECT_ID/$IMAGE_NAME"
 BUCKET_NAME="sp500-goal-seek-results"
+GOOGLE_CHAT_WEBHOOK="https://chat.googleapis.com/v1/spaces/AAQAe5YYp6U/messages?key=AIzaSyDdI0hCZtE6vySjMm-WEfRq3CPzqKqqsHI&token=wqZhESTeAJnL7CatoWGEhEkITan5m1jcVfILWfAmAA0"
 
 echo "========================================================"
 echo "   🚀 SP500 Analyzer - Cloud Deploy Script"
@@ -53,7 +54,8 @@ gcloud beta run jobs create "$JOB_NAME" \
     --cpu 8 \
     --memory 16Gi \
     --task-timeout 60m \
-    --max-retries 0
+    --max-retries 0 \
+    --set-env-vars "GOOGLE_CHAT_WEBHOOK=$GOOGLE_CHAT_WEBHOOK"
 
 if [ $? -ne 0 ]; then
     echo "❌ Deployment failed."
