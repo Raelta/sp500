@@ -41,21 +41,32 @@ echo ""
 echo "🔄 Step 2: Updating Cloud Run Job..."
 echo "--------------------------------------------------------"
 
-# Delete existing job to ensure clean state (removes old volume mounts)
-echo "Recreating Cloud Run Job to ensure clean volume configuration..."
-gcloud beta run jobs delete "$JOB_NAME" --project "$PROJECT_ID" --region "$REGION" --quiet 2>/dev/null || true
-
-# Create new job
-gcloud beta run jobs create "$JOB_NAME" \
-    --image "$IMAGE_URI" \
-    --region "$REGION" \
-    --project "$PROJECT_ID" \
-    --tasks 1 \
-    --cpu 8 \
-    --memory 16Gi \
-    --task-timeout 60m \
-    --max-retries 0 \
-    --set-env-vars "GOOGLE_CHAT_WEBHOOK=$GOOGLE_CHAT_WEBHOOK"
+# Check if job exists
+if gcloud beta run jobs describe "$JOB_NAME" --project "$PROJECT_ID" --region "$REGION" >/dev/null 2>&1; then
+    echo "Updating existing Cloud Run Job..."
+    gcloud beta run jobs update "$JOB_NAME" \
+        --image "$IMAGE_URI" \
+        --region "$REGION" \
+        --project "$PROJECT_ID" \
+        --tasks 1 \
+        --cpu 8 \
+        --memory 16Gi \
+        --task-timeout 360m \
+        --max-retries 0 \
+        --set-env-vars "GOOGLE_CHAT_WEBHOOK=$GOOGLE_CHAT_WEBHOOK"
+else
+    echo "Creating new Cloud Run Job..."
+    gcloud beta run jobs create "$JOB_NAME" \
+        --image "$IMAGE_URI" \
+        --region "$REGION" \
+        --project "$PROJECT_ID" \
+        --tasks 1 \
+        --cpu 8 \
+        --memory 16Gi \
+        --task-timeout 360m \
+        --max-retries 0 \
+        --set-env-vars "GOOGLE_CHAT_WEBHOOK=$GOOGLE_CHAT_WEBHOOK"
+fi
 
 if [ $? -ne 0 ]; then
     echo "❌ Deployment failed."
