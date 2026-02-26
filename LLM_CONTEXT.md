@@ -10,8 +10,6 @@ This project is a high-performance analysis tool for detecting "Bump and Slide" 
 | **`app.py`** | Main Streamlit dashboard. Handles "Standard Analysis" mode, visualization, and interactivity. |
 | **`goal_seek_cli.py`** | CLI tool for "Goal Seek" (Reverse Search). Finds parameters achieving a target Conversion Rate. Uses parallel processing. |
 | **`src/search_engine.py`** | **Core Optimization Engine**. Used by CLI. Implements Multiprocessing, Data-Driven Pruning, and Vectorized Broadcasting. |
-| **`src/catalog_search.py`** | **Optimized Catalog Search Engine**. Uses pre-computed `WindowCatalog` for ultra-fast, multi-threaded vector search. |
-| **`src/catalog.py`** | Manages pre-computation of Price/Volume matrices (Hybrid Catalog) for instant lookups. |
 | **`src/analyzer.py`** | Core pattern detection logic. Calculates **Size Volume** (Vol × PriceChange) and rolling metrics. |
 | **`src/data_loader.py`** | Handles data loading/caching. Calculates **Yearly Median** metrics for reference lines. |
 | **`src/visualizer.py`** | Generates Plotly charts. **Key Feature**: Uses `category` axis to remove time gaps (overnight/weekend) and marks session breaks with vertical lines. |
@@ -30,12 +28,6 @@ Designed for exhaustive grid search over parameter space using standard rolling 
 2.  **Data-Driven Pruning**: Calculates max possible values in data subset to instantly discard impossible parameter thresholds ("Fail Fast").
 3.  **Vectorized Broadcasting**: Uses NumPy matrix multiplication to check thousands of threshold combinations simultaneously, eliminating the inner loop.
 4.  **Overlap Filtering**: Applies **Non-Maximum Suppression (NMS)** to filter out overlapping matches. Keeps the match with the highest slide magnitude.
-
-### Catalog Search (`src/catalog_search.py`)
-Designed for ultra-high-throughput search using pre-computed data (`--use-catalog`).
-1.  **Hybrid Catalog**: Uses a Memory-Mapped Matrix for **Percent Change** (instant vectorized access) and Cumulative Sum arrays for **Volume/UpCandle** (instant O(1) calc).
-2.  **Threading**: Uses `ThreadPoolExecutor` to saturate CPU cores, leveraging NumPy's GIL-releasing operations for true parallelism.
-3.  **Overlap Filtering**: Also implements NMS to ensure consistent results with the standard engine, preventing double-counting of consecutive hits.
 
 ## 4. Architectural Decisions
 

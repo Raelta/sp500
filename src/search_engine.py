@@ -37,29 +37,46 @@ def _process_structure(df_all, s_dict, filter_keys, filter_values, target_cr_min
     bump_up_pct = is_up.rolling(window=bump_len).mean().shift(-(bump_len - 1)) * 100
     slide_up_pct = is_up.rolling(window=slide_len).mean().shift(-(bump_len + slide_len - 1)) * 100
     
-    # Pre-calculate absolute changes
-    bump_change_abs = bump_change.abs()
-    slide_change_abs = slide_change.abs()
-
     # --- OPTIMIZATION: Data-Driven Pruning ---
-    max_vals = {
-        'bump_threshold': bump_change_abs.max(),
-        'slide_threshold': slide_change_abs.max(),
-        'min_bump_vol': bump_vol.max(),
-        'min_slide_vol': slide_vol.max(),
-        'bump_up_pct': bump_up_pct.max(),
-        'slide_up_pct': slide_up_pct.max()
+    # Determine bounds for pruning
+    bounds = {
+        'bump_threshold': (bump_change.min(), bump_change.max()),
+        'slide_threshold': (slide_change.min(), slide_change.max()),
+        'min_bump_vol': (bump_vol.min(), bump_vol.max()),
+        'min_slide_vol': (slide_vol.min(), slide_vol.max()),
+        'bump_up_pct': (bump_up_pct.min(), bump_up_pct.max()),
+        'slide_up_pct': (slide_up_pct.min(), slide_up_pct.max())
     }
     
     pruned_filter_values = []
     for i, key in enumerate(filter_keys):
         original_values = filter_values[i]
-        current_max = max_vals.get(key, float('inf'))
-        if pd.isna(current_max):
-            pruned_values = []
-        else:
-            pruned_values = [v for v in original_values if v <= current_max]
-        pruned_filter_values.append(pruned_values)
+        
+        # Get bounds for this metric
+        metric_min, metric_max = bounds.get(key, (-float('inf'), float('inf')))
+        if pd.isna(metric_min): metric_min = -float('inf')
+        if pd.isna(metric_max): metric_max = float('inf')
+
+        valid_vals = []
+        for v in original_values:
+            # Logic: Is it POSSIBLE to find a value satisfying the condition?
+            # If v >= 0, we look for metric >= v. Possible if metric_max >= v.
+            # If v < 0, we look for metric <= v. Possible if metric_min <= v.
+            
+            # Volume and UpPct are always >= 0, so standard logic applies
+            if key in ['min_bump_vol', 'min_slide_vol', 'bump_up_pct', 'slide_up_pct']:
+                 if v <= metric_max:
+                     valid_vals.append(v)
+            else:
+                # Thresholds (can be positive or negative)
+                if v >= 0:
+                    if metric_max >= v:
+                        valid_vals.append(v)
+                else:
+                    if metric_min <= v:
+                        valid_vals.append(v)
+                        
+        pruned_filter_values.append(valid_vals)
     
     if any(len(lst) == 0 for lst in pruned_filter_values):
         return []
@@ -73,15 +90,35 @@ def _process_structure(df_all, s_dict, filter_keys, filter_values, target_cr_min
     bump_combos = list(itertools.product(*bump_pruned))
     slide_combos = list(itertools.product(*slide_pruned))
     
-    metrics = [bump_change_abs, slide_change_abs, bump_vol, slide_vol, bump_up_pct, slide_up_pct]
+    metrics = [bump_change, slide_change, bump_vol, slide_vol, bump_up_pct, slide_up_pct]
     
     mask_cache = {}
     for idx, key in enumerate(filter_keys):
         metric = metrics[idx].to_numpy()
-        metric = np.nan_to_num(metric, nan=-np.inf)
+        # For negative comparisons, we need to handle NaN carefully. 
+        # But generally nan comparisons are False.
+        # np.nan_to_num might distort data if we replace with 0 or large neg numbers.
+        # Let's keep NaNs but handle comparisons safely or use fillna.
+        # Using a safe fill value:
+        if key in ['min_bump_vol', 'min_slide_vol']:
+             metric = np.nan_to_num(metric, nan=-1.0) # Volumes >= 0
+        elif key in ['bump_up_pct', 'slide_up_pct']:
+             metric = np.nan_to_num(metric, nan=-1.0) # Pcts >= 0
+        else:
+             # Changes can be anything. NaNs should fail any threshold check?
+             # If we use np.nan, comparison warnings might occur.
+             metric = np.nan_to_num(metric, nan=0.0) # Assumption: 0 change is neutral
+
         mask_cache[key] = {}
         for val in pruned_filter_values[idx]:
-            mask_cache[key][val] = (metric >= val)
+            if key in ['min_bump_vol', 'min_slide_vol', 'bump_up_pct', 'slide_up_pct']:
+                mask_cache[key][val] = (metric >= val)
+            else:
+                # Directional Logic for Thresholds
+                if val >= 0:
+                    mask_cache[key][val] = (metric >= val)
+                else:
+                    mask_cache[key][val] = (metric <= val)
             
     def build_matrix(indices, combos):
         cols = []
@@ -126,8 +163,38 @@ def _process_structure(df_all, s_dict, filter_keys, filter_values, target_cr_min
         if raw_hits == 0:
             true_hits = 0
         else:
-            scores = slide_change_abs.iloc[raw_hit_indices].values
-            sorted_order = np.argsort(scores)[::-1]
+            # Scoring:
+            # If looking for Positive slide (val >= 0), higher is better.
+            # If looking for Negative slide (val < 0), lower (more negative) is better?
+            # Or just "magnitude" is better?
+            # Usually "Best Hit" implies the most extreme move in the desired direction.
+            
+            # Determine target direction from the slide threshold value
+            # We need to know WHICH threshold value was used for this 's' index.
+            # slide_keys_names includes 'slide_threshold'. Find its index in names.
+            
+            # Note: We are inside a loop over b, s indices.
+            # We need to find the value of 'slide_threshold' in the current combination.
+            # The current slide combo is slide_combos[s].
+            
+            # Find index of 'slide_threshold' in slide_keys_names
+            try:
+                st_idx = slide_keys_names.index('slide_threshold')
+                current_slide_thresh = slide_combos[s][st_idx]
+            except ValueError:
+                # Should not happen if 'slide_threshold' is in filter_keys
+                current_slide_thresh = 0 # Default fallback
+            
+            # Extract scores
+            scores = slide_change.iloc[raw_hit_indices].values
+            
+            if current_slide_thresh >= 0:
+                # Descending order (Higher is better)
+                sorted_order = np.argsort(scores)[::-1]
+            else:
+                # Ascending order (Lower/More Negative is better)
+                sorted_order = np.argsort(scores)
+                
             sorted_indices = raw_hit_indices[sorted_order]
             kept_indices = []
             occupied = np.zeros(n_rows, dtype=bool)
@@ -211,6 +278,23 @@ class GoalSeeker:
         struct_values = [get_param_values(k) for k in structural_keys]
         filter_values = [get_param_values(k) for k in filter_keys]
         
+        # Apply Year Filtering if provided in fixed_params
+        df_to_search = self.df
+        if fixed_params:
+            start_year = fixed_params.get('start_year')
+            end_year = fixed_params.get('end_year')
+            
+            if start_year is not None and end_year is not None:
+                # Assuming 'date' column is datetime
+                mask = (df_to_search['date'].dt.year >= int(start_year)) & \
+                       (df_to_search['date'].dt.year <= int(end_year))
+                df_to_search = df_to_search.loc[mask].reset_index(drop=True)
+                
+                # Check if we have data left
+                if df_to_search.empty:
+                    print(f"Warning: Year filter {start_year}-{end_year} resulted in empty dataset.")
+                    return pd.DataFrame()
+
         results = []
         max_workers = os.cpu_count() or 1
         struct_combos = list(itertools.product(*struct_values))
@@ -221,7 +305,7 @@ class GoalSeeker:
             for struct_combo in struct_combos:
                 s_dict = dict(zip(structural_keys, struct_combo))
                 future = executor.submit(
-                    _process_structure, self.df, s_dict, filter_keys, filter_values, target_cr_min, min_bumps, detailed
+                    _process_structure, df_to_search, s_dict, filter_keys, filter_values, target_cr_min, min_bumps, detailed
                 )
                 future_to_struct[future] = s_dict
             

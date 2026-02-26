@@ -9,6 +9,7 @@ A Python application designed to analyze intraday SPY (S&P 500 ETF) data for "Bu
   - Detects patterns based on configurable lengths (minutes), thresholds (price/%), and volume.
 - **Goal Seek (UI Integrated)**:
   - **Exhaustive Search**: Define parameter ranges directly in the Web UI and find the most successful combinations.
+  - **Year Range Filtering**: Specify a start and end year to focus your search on specific market conditions.
   - **Local & Cloud Execution**: Run searches on your local machine or offload them to Google Cloud for high performance.
   - **Cloud Results Viewer**: Browse history of previous cloud runs, filter by user label, and load past results instantly.
   - **Auto-Monitoring**: Real-time progress bars and status updates for active cloud jobs, with estimated completion times.

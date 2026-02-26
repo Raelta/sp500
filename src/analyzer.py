@@ -153,11 +153,25 @@ def find_bumps_and_slides(
          return pd.DataFrame(), {'total_bumps': 0, 'hits': 0, 'misses': 0, 'hit_ratio': 0}
 
     # Calculate masks
-    bump_mask = (candidates['bump_change'].abs() >= bump_threshold) & \
+    # Directional Logic:
+    # If threshold >= 0, we look for change >= threshold (Positive Move)
+    # If threshold < 0, we look for change <= threshold (Negative Move)
+    
+    if bump_threshold >= 0:
+        bump_change_mask = (candidates['bump_change'] >= bump_threshold)
+    else:
+        bump_change_mask = (candidates['bump_change'] <= bump_threshold)
+        
+    if slide_threshold >= 0:
+        slide_change_mask = (candidates['slide_change'] >= slide_threshold)
+    else:
+        slide_change_mask = (candidates['slide_change'] <= slide_threshold)
+
+    bump_mask = bump_change_mask & \
                 (candidates['bump_vol'] >= min_bump_vol) & \
                 (candidates['bump_up_pct'] >= bump_up_pct)
                 
-    slide_mask = (candidates['slide_change'].abs() >= slide_threshold) & \
+    slide_mask = slide_change_mask & \
                  (candidates['slide_vol'] >= min_slide_vol) & \
                  (candidates['slide_up_pct'] >= slide_up_pct)
     

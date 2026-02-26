@@ -196,5 +196,5 @@ def render_version_info():
     Renders the app version info in the sidebar.
     """
     ver = get_app_version()
-    st.sidebar.markdown(f"**Version:** v0.1.{ver['count']} ({ver['hash']})")
+    st.sidebar.markdown(f"**Version:** v0.1.{ver['count']} ({ver['hash']}) - {ver['date']}")
     st.sidebar.markdown("**Built by Raelta**")

@@ -99,18 +99,26 @@ def render_goal_seek(df, cli_args, val_report):
         gs_params = {}
         
         # Lengths (Compact Mode)
-        b_len_start, b_len_end, b_len_step = render_range_input("Bump Length (min)", 1, 2880, 3, 6, 1, "gs_b_len", compact=True)
+        b_len_start, b_len_end, b_len_step = render_range_input("Bump Length (min)", 1, 2880, 10, 10, 1, "gs_b_len", compact=True)
         gs_params['bump_len'] = (b_len_start, b_len_end, b_len_step)
         
-        s_len_start, s_len_end, s_len_step = render_range_input("Slide Length (min)", 1, 2880, 3, 6, 1, "gs_s_len", compact=True)
+        s_len_start, s_len_end, s_len_step = render_range_input("Slide Length (min)", 1, 2880, 10, 10, 1, "gs_s_len", compact=True)
         gs_params['slide_len'] = (s_len_start, s_len_end, s_len_step)
         
-        # Thresholds (Side by side)
-        col_th1, col_th2 = st.columns(2)
-        with col_th1:
-            min_b_thresh = st.number_input("Min Bump Thresh %", value=3.0, step=0.1, key="gs_min_b_thresh")
-        with col_th2:
-            min_s_thresh = st.number_input("Min Slide Thresh %", value=3.0, step=0.1, key="gs_min_s_thresh")
+        # Thresholds & Direction
+        st.markdown("**Bump Settings**")
+        col_b1, col_b2 = st.columns(2)
+        with col_b1:
+            b_dir = st.radio("Bump Direction", ["Positive", "Negative"], horizontal=True, label_visibility="collapsed", key="gs_b_dir")
+        with col_b2:
+            min_b_thresh = st.number_input("Min Bump %", value=0.5, step=0.1, key="gs_min_b_thresh")
+
+        st.markdown("**Slide Settings**")
+        col_s1, col_s2 = st.columns(2)
+        with col_s1:
+            s_dir = st.radio("Slide Direction", ["Positive", "Negative"], horizontal=True, label_visibility="collapsed", key="gs_s_dir")
+        with col_s2:
+            min_s_thresh = st.number_input("Min Slide %", value=0.3, step=0.1, key="gs_min_s_thresh")
         
         # Advanced Parameters Expander
         with st.expander("Advanced parameters", expanded=False):
@@ -130,6 +138,17 @@ def render_goal_seek(df, cli_args, val_report):
 
             min_bumps_req = st.number_input("Min Bumps Req", value=0, step=1)
         
+        # Year Range (Always Visible, above Advanced)
+        st.markdown("**Search Range**")
+        min_year = int(df['date'].dt.year.min())
+        max_year = int(df['date'].dt.year.max())
+        
+        col_y1, col_y2 = st.columns(2)
+        with col_y1:
+            start_year = st.number_input("Start Year", min_value=min_year, max_value=max_year, value=min_year)
+        with col_y2:
+            end_year = st.number_input("End Year", min_value=min_year, max_value=max_year, value=max_year)
+
         # Execution
         run_cloud = st.checkbox("☁️ Cloud Run", value=True)
         
@@ -150,10 +169,27 @@ def render_goal_seek(df, cli_args, val_report):
 
     # Prepare Config Grid
     grid = generate_grid_from_ui(gs_params)
-    grid['bump_threshold'] = [min_b_thresh]
-    grid['slide_threshold'] = [min_s_thresh]
     
-    fixed_params = { 'bump_thresh_type': 'percent', 'slide_thresh_type': 'percent' }
+    # Adjust thresholds based on direction
+    # If Negative, we want to look for values <= -threshold
+    # The backend will handle the logic if we pass the direction or if we sign the threshold?
+    # Let's pass the raw threshold and a direction flag, OR just sign the threshold.
+    # The user said: "toggle for positive and negative and the results should filter for data that exceeds those magnitudes"
+    # If I pass -0.5, logic should be change <= -0.5
+    # If I pass 0.5, logic should be change >= 0.5
+    
+    final_b_thresh = min_b_thresh if b_dir == "Positive" else -min_b_thresh
+    final_s_thresh = min_s_thresh if s_dir == "Positive" else -min_s_thresh
+    
+    grid['bump_threshold'] = [final_b_thresh]
+    grid['slide_threshold'] = [final_s_thresh]
+    
+    fixed_params = { 
+        'bump_thresh_type': 'percent', 
+        'slide_thresh_type': 'percent',
+        'start_year': start_year,
+        'end_year': end_year
+    }
 
     # Calculate and display estimate
     total_configs = 1

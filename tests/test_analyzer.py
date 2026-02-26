@@ -21,7 +21,7 @@ def test_exact_match(generator):
     results, stats = find_bumps_and_slides(
         df,
         bump_len=10, bump_threshold=4.0, bump_thresh_type="percent",
-        slide_len=10, slide_threshold=4.0, slide_thresh_type="percent",
+        slide_len=10, slide_threshold=-4.0, slide_thresh_type="percent",
         min_bump_vol=0, min_slide_vol=0
     )
     
@@ -43,7 +43,7 @@ def test_threshold_sensitivity(generator):
     results_found, _ = find_bumps_and_slides(
         df,
         bump_len=10, bump_threshold=4.0, bump_thresh_type="percent",
-        slide_len=10, slide_threshold=4.0, slide_thresh_type="percent"
+        slide_len=10, slide_threshold=-4.0, slide_thresh_type="percent"
     )
     injected_time = df.iloc[100]['date']
     assert not results_found[results_found['date'] == injected_time].empty
@@ -52,7 +52,7 @@ def test_threshold_sensitivity(generator):
     results_missed, _ = find_bumps_and_slides(
         df,
         bump_len=10, bump_threshold=6.0, bump_thresh_type="percent",
-        slide_len=10, slide_threshold=4.0, slide_thresh_type="percent"
+        slide_len=10, slide_threshold=-4.0, slide_thresh_type="percent"
     )
     assert results_missed[results_missed['date'] == injected_time].empty
 
@@ -68,7 +68,7 @@ def test_day_of_week_filter(generator):
     results_mon, _ = find_bumps_and_slides(
         df,
         bump_len=10, bump_threshold=4.0, bump_thresh_type="percent",
-        slide_len=10, slide_threshold=4.0, slide_thresh_type="percent",
+        slide_len=10, slide_threshold=-4.0, slide_thresh_type="percent",
         days_of_week=['Monday']
     )
     assert not results_mon.empty
@@ -77,7 +77,7 @@ def test_day_of_week_filter(generator):
     results_tue, _ = find_bumps_and_slides(
         df,
         bump_len=10, bump_threshold=4.0, bump_thresh_type="percent",
-        slide_len=10, slide_threshold=4.0, slide_thresh_type="percent",
+        slide_len=10, slide_threshold=-4.0, slide_thresh_type="percent",
         days_of_week=['Tuesday']
     )
     assert results_tue.empty
@@ -92,7 +92,7 @@ def test_length_parameters(generator):
     results_20, _ = find_bumps_and_slides(
         df,
         bump_len=20, bump_threshold=4.0, bump_thresh_type="percent",
-        slide_len=10, slide_threshold=4.0, slide_thresh_type="percent"
+        slide_len=10, slide_threshold=-4.0, slide_thresh_type="percent"
     )
     injected_time = df.iloc[100]['date']
     assert not results_20[results_20['date'] == injected_time].empty
@@ -102,7 +102,7 @@ def test_length_parameters(generator):
     results_10, _ = find_bumps_and_slides(
         df,
         bump_len=10, bump_threshold=4.0, bump_thresh_type="percent",
-        slide_len=10, slide_threshold=4.0, slide_thresh_type="percent"
+        slide_len=10, slide_threshold=-4.0, slide_thresh_type="percent"
     )
     
     # Logic check:
@@ -130,7 +130,7 @@ def test_true_hits_suppression(generator):
     results, stats = find_bumps_and_slides(
         df,
         bump_len=10, bump_threshold=4.0, bump_thresh_type="percent",
-        slide_len=10, slide_threshold=4.0, slide_thresh_type="percent"
+        slide_len=10, slide_threshold=-4.0, slide_thresh_type="percent"
     )
     
     # We expect both to be "hits" initially, but "true_hits" should filter.
@@ -150,7 +150,7 @@ def test_volume_filtering(generator):
     results, _ = find_bumps_and_slides(
         df,
         bump_len=10, bump_threshold=4.0, bump_thresh_type="percent",
-        slide_len=10, slide_threshold=4.0, slide_thresh_type="percent",
+        slide_len=10, slide_threshold=-4.0, slide_thresh_type="percent",
         min_bump_vol=1000, min_slide_vol=1000
     )
     injected_time = df.iloc[100]['date']
@@ -200,7 +200,7 @@ def test_value_threshold(generator):
     results, _ = find_bumps_and_slides(
         df,
         bump_len=10, bump_threshold=4.0, bump_thresh_type="value",
-        slide_len=10, slide_threshold=4.0, slide_thresh_type="value"
+        slide_len=10, slide_threshold=-4.0, slide_thresh_type="value"
     )
     injected_time = df.iloc[100]['date']
     assert not results[results['date'] == injected_time].empty
@@ -209,7 +209,7 @@ def test_value_threshold(generator):
     results_fail, _ = find_bumps_and_slides(
         df,
         bump_len=10, bump_threshold=6.0, bump_thresh_type="value",
-        slide_len=10, slide_threshold=4.0, slide_thresh_type="value"
+        slide_len=10, slide_threshold=-4.0, slide_thresh_type="value"
     )
     assert results_fail[results_fail['date'] == injected_time].empty
 
@@ -228,7 +228,7 @@ def test_time_range_filter(generator):
     results, _ = find_bumps_and_slides(
         df,
         bump_len=10, bump_threshold=4.0, bump_thresh_type="percent",
-        slide_len=10, slide_threshold=4.0, slide_thresh_type="percent",
+        slide_len=10, slide_threshold=-4.0, slide_thresh_type="percent",
         time_range=(t_start, t_end)
     )
     assert not results[results['date'] == injected_time].empty
@@ -240,7 +240,7 @@ def test_time_range_filter(generator):
     results_fail, _ = find_bumps_and_slides(
         df,
         bump_len=10, bump_threshold=4.0, bump_thresh_type="percent",
-        slide_len=10, slide_threshold=4.0, slide_thresh_type="percent",
+        slide_len=10, slide_threshold=-4.0, slide_thresh_type="percent",
         time_range=(t_start_late, t_end_late)
     )
     assert results_fail[results_fail['date'] == injected_time].empty
