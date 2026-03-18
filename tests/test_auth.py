@@ -3,11 +3,6 @@ from unittest.mock import MagicMock, patch
 import sys
 import datetime
 
-# Mock modules that depend on streamlit before importing src.ui.auth
-# This is necessary because src.ui.auth imports streamlit at the top level
-sys.modules["streamlit"] = MagicMock()
-sys.modules["extra_streamlit_components"] = MagicMock()
-
 # Now we can import the module under test
 from src.ui.auth import _hash_token, check_password, logout
 

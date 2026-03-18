@@ -293,7 +293,13 @@ class GoalSeeker:
                 # Check if we have data left
                 if df_to_search.empty:
                     print(f"Warning: Year filter {start_year}-{end_year} resulted in empty dataset.")
-                    return pd.DataFrame()
+                    # Return empty DataFrame with expected columns to avoid CSV parsing errors
+                    return pd.DataFrame(columns=[
+                        'bump_len', 'slide_len', 'bump_thresh_type', 'slide_thresh_type',
+                        'bump_threshold', 'slide_threshold', 'min_bump_vol', 'min_slide_vol',
+                        'bump_up_pct', 'slide_up_pct', 'total_bumps', 'total_hits', 'true_hits',
+                        'hits', 'scope_start', 'scope_end', 'scope_rows'
+                    ])
 
         results = []
         max_workers = os.cpu_count() or 1
@@ -324,9 +330,9 @@ class GoalSeeker:
 
         df_results = pd.DataFrame(results)
         if not df_results.empty:
-            df_results['scope_start'] = self.df['date'].min()
-            df_results['scope_end'] = self.df['date'].max()
-            df_results['scope_rows'] = len(self.df)
+            df_results['scope_start'] = df_to_search['date'].min()
+            df_results['scope_end'] = df_to_search['date'].max()
+            df_results['scope_rows'] = len(df_to_search)
             
         return df_results
 

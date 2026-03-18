@@ -594,9 +594,19 @@ def render_goal_seek(df, cli_args, val_report):
                         st.json({k: v for k, v in viz_config.items() if k not in ['selected_years', 'all_years']})
                     
                     with st.spinner("Finding matches for visualization..."):
+                        # Filter dataframe if scope metadata is available
+                        df_viz = df
+                        if 'scope_start' in row_data and not pd.isna(row_data['scope_start']):
+                            try:
+                                s_start = pd.to_datetime(row_data['scope_start'])
+                                s_end = pd.to_datetime(row_data['scope_end'])
+                                df_viz = df[(df['date'] >= s_start) & (df['date'] <= s_end)].copy()
+                            except Exception as e:
+                                print(f"Error filtering viz dataframe: {e}")
+
                         # Run Analysis Locally for this specific config
                         results, stats = find_bumps_and_slides(
-                            df,
+                            df_viz,
                             viz_config['bump_len'], viz_config['bump_threshold'], viz_config['bump_thresh_type'],
                             viz_config['slide_len'], viz_config['slide_threshold'], viz_config['slide_thresh_type'],
                             min_bump_vol=viz_config['min_bump_vol'],
