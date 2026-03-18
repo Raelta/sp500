@@ -51,7 +51,7 @@ def generate_grid_from_ui(params):
         grid[key] = vals
     return grid
 
-def format_params_grid(grid):
+def format_params_grid(grid, fixed_params=None):
     if not grid:
         return "-"
     
@@ -90,6 +90,15 @@ def format_params_grid(grid):
             # Shorten keys
             short_k = k.replace("bump", "B").replace("slide", "S").replace("threshold", "Th").replace("len", "L")
             parts.append(f"{short_k}:{val_str}")
+            
+    if fixed_params:
+        if 'start_year' in fixed_params and 'end_year' in fixed_params:
+            s_yr = fixed_params['start_year']
+            e_yr = fixed_params['end_year']
+            if s_yr == e_yr:
+                parts.append(f"Yr:{s_yr}")
+            else:
+                parts.append(f"Yr:{s_yr}-{e_yr}")
             
     return " | ".join(parts)
 
@@ -421,7 +430,8 @@ def render_goal_seek(df, cli_args, val_report):
                      
                      # Params Summary
                      p_grid = h.get('params_grid')
-                     p_summary = format_params_grid(p_grid)
+                     f_params = h.get('fixed_params')
+                     p_summary = format_params_grid(p_grid, f_params)
 
                      hist_data.append({
                          "Run Time": ts_fmt,
@@ -497,7 +507,7 @@ def render_goal_seek(df, cli_args, val_report):
                 status_text.text(msg)
                 
             start_t = time.time()
-            results_df = seeker.search(grid, min_bumps=min_bumps_req, progress_callback=update_progress)
+            results_df = seeker.search(grid, fixed_params=fixed_params, min_bumps=min_bumps_req, progress_callback=update_progress)
             
             if not results_df.empty:
                 st.session_state.gs_results = results_df.sort_values('total_hits', ascending=False)
