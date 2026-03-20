@@ -88,7 +88,7 @@ def check_intraday_gaps(df):
 
 def check_missing_minutes(df):
     """
-    Checks for missing 1-minute intervals between 09:30 and 16:00 on trading days.
+    Checks for missing 1-minute intervals between 08:30 and 15:00 on trading days.
     Assumes duplicates have been removed or dealt with.
     """
     if df.empty or 'date' not in df.columns:
@@ -100,9 +100,9 @@ def check_missing_minutes(df):
     # 1. Get unique dates
     unique_dates = df['date'].dt.date.unique()
     
-    # 2. Expected count per day (09:30 to 16:00 inclusive = 391 minutes)
-    # 9:30 to 16:00 is 6.5 hours = 390 mins + 1 (inclusive start/end?) 
-    # Usually SPY data includes 16:00 close. 9:30, 9:31 ... 16:00 = 391 points.
+    # 2. Expected count per day (08:30 to 15:00 inclusive = 391 minutes)
+    # 8:30 to 15:00 is 6.5 hours = 390 mins + 1 (inclusive start/end) 
+    # Usually SPY data includes the 15:00 (3:00 PM) close bar. 
     EXPECTED_COUNT = 391
     
     # 3. Count actual rows per day

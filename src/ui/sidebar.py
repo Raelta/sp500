@@ -58,14 +58,14 @@ def render_sidebar(df, cli_args):
 
     # Defaults for thresholds
     if bump_thresh_type == "percent":
-        b_val, b_step = applied.get('bump_threshold', 0.34), 0.01
+        b_val, b_step = applied.get('bump_threshold', 0.02), 0.01
         b_label = "Bump Thresh (%)"
     else:
         b_val, b_step = applied.get('bump_threshold', 0.50), 0.05
         b_label = "Bump Thresh (Diff)"
 
     if slide_thresh_type == "percent":
-        s_val, s_step = applied.get('slide_threshold', 0.34), 0.01
+        s_val, s_step = applied.get('slide_threshold', 0.06), 0.01
         s_label = "Slide Thresh (%)"
     else:
         s_val, s_step = applied.get('slide_threshold', 0.50), 0.05
@@ -73,7 +73,7 @@ def render_sidebar(df, cli_args):
 
     # --- BUMP PARAMETERS ---
     st.sidebar.subheader("Bump Parameters")
-    b_len_default = applied.get('bump_len', cli_args.bump_len if cli_args.bump_len is not None else 5)
+    b_len_default = applied.get('bump_len', cli_args.bump_len if cli_args.bump_len is not None else 30)
     bump_len = render_time_input("Bump Size", b_len_default, "sb_bump_size")
     
     col_b1, col_b2 = st.sidebar.columns(2)
@@ -85,7 +85,7 @@ def render_sidebar(df, cli_args):
 
     # --- SLIDE PARAMETERS ---
     st.sidebar.subheader("Slide Parameters")
-    s_len_default = applied.get('slide_len', cli_args.slide_len if cli_args.slide_len is not None else 3)
+    s_len_default = applied.get('slide_len', cli_args.slide_len if cli_args.slide_len is not None else 30)
     slide_len = render_time_input("Slide Size", s_len_default, "sb_slide_size")
     
     col_s1, col_s2 = st.sidebar.columns(2)
@@ -108,7 +108,7 @@ def render_sidebar(df, cli_args):
 
     # --- TIME OF DAY ---
     st.sidebar.subheader("Time of Day")
-    tr_default = applied.get('time_range', (time(9, 30), time(16, 0)))
+    tr_default = applied.get('time_range', (time(8, 30), time(15, 0)))
     
     col_tm1, col_tm2 = st.sidebar.columns(2)
     with col_tm1:

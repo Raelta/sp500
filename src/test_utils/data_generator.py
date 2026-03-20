@@ -7,7 +7,7 @@ class MarketDataGenerator:
         if seed is not None:
             np.random.seed(seed)
         
-    def generate_noise(self, start_date="2023-01-01", days=10, minutes_per_day=390, start_price=100.0, volatility=0.0005, start_time="09:30"):
+    def generate_noise(self, start_date="2023-01-01", days=10, minutes_per_day=391, start_price=100.0, volatility=0.0005, start_time="08:30"):
         """
         Generates a DataFrame with random market data (Geometric Brownian Motion).
         """
@@ -26,7 +26,9 @@ class MarketDataGenerator:
             # Let's map to Mon-Fri if needed, but for now just sequential days
             
             # Create minute timestamps for the day
-            base_time = current_date.replace(hour=h, minute=m)
+            # We must be careful not to create a naive timestamp if we want to match localization later
+            # But here we just need a baseline.
+            base_time = current_date.replace(hour=h, minute=m, second=0, microsecond=0)
             
             daily_prices = [current_price]
             # Generate returns

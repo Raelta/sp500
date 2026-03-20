@@ -61,11 +61,11 @@ Upon first visit, you will be prompted to log in.
 For headless execution or scripting, use the dedicated CLI tool.
 
 ```bash
-# Basic run with default settings
+# Basic run with default settings (30 min lengths, 0.02/0.06 thresholds)
 python goal_seek_cli.py
 
-# Specify parameter ranges
-python goal_seek_cli.py --bump-len-start 5 --bump-len-end 10 --min-bump-threshold 5.0
+# Specify custom parameter ranges
+python goal_seek_cli.py --bump-len-start 10 --bump-len-end 60 --min-bump-threshold 0.5
 
 # Filter by minimum number of bumps
 python goal_seek_cli.py --min-bumps 10

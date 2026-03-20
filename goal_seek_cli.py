@@ -11,11 +11,11 @@ def parse_args():
     description = "Goal Seek CLI for SP500 Bump & Slide Analysis"
     epilog = """
 Examples:
-  # Run with default settings (Lengths 3-6, Thresholds >= 3.0)
+  # Run with default settings (Lengths 30, Thresholds >= 0.02/0.06)
   python goal_seek_cli.py
 
   # Run with custom length ranges and higher thresholds
-  python goal_seek_cli.py --bump-len-start 5 --bump-len-end 10 --min-bump-threshold 5.0
+  python goal_seek_cli.py --bump-len-start 10 --bump-len-end 60 --min-bump-threshold 0.5
 
   # Run with minimum bumps filter
   python goal_seek_cli.py --min-bumps 10
@@ -27,11 +27,11 @@ Available Parameter Ranges:
     --[name]-step:  Step size (set to 0 to lock at start value)
 
   Parameters:
-    bump-len, slide-len       (Default: 3-6, step 1)
+    bump-len, slide-len       (Default: 30, step 1)
     
   Thresholds (Single Minimum Value):
-    --min-bump-threshold      (Default: 3.0)
-    --min-slide-threshold     (Default: 3.0)
+    --min-bump-threshold      (Default: 0.02)
+    --min-slide-threshold     (Default: 0.06)
     
   Other Ranges:
     bump-vol, slide-vol       (Default: Locked at 0)
@@ -56,6 +56,8 @@ Output Columns:
     parser.add_argument("--top-n", type=int, default=20, help="Number of top results to display")
     parser.add_argument("--output", default="goal_seek_results.csv", help="Output CSV filename")
     parser.add_argument("--detailed", action="store_true", help="Output detailed matches (one row per match) in results CSV instead of summaries")
+    parser.add_argument("--start-year", type=int, help="Start year for data filtering")
+    parser.add_argument("--end-year", type=int, help="End year for data filtering")
     
     # Helper to add range args
     def add_range_args(name, default_start, default_end, default_step, help_text):
@@ -65,12 +67,12 @@ Output Columns:
         group.add_argument(f"--{name}-step", type=float, default=default_step, help=f"Step {help_text}")
 
     # Add parameters (Using defaults from UI/User Request)
-    add_range_args("bump-len", 3, 6, 1, "Bump Length (min)")
-    add_range_args("slide-len", 3, 6, 1, "Slide Length (min)")
+    add_range_args("bump-len", 30, 30, 1, "Bump Length (min)")
+    add_range_args("slide-len", 30, 30, 1, "Slide Length (min)")
     
     # Thresholds (Fixed Minimums)
-    parser.add_argument("--min-bump-threshold", type=float, default=3.0, help="Minimum Bump Threshold")
-    parser.add_argument("--min-slide-threshold", type=float, default=3.0, help="Minimum Slide Threshold")
+    parser.add_argument("--min-bump-threshold", type=float, default=0.02, help="Minimum Bump Threshold")
+    parser.add_argument("--min-slide-threshold", type=float, default=0.06, help="Minimum Slide Threshold")
     
     # Volumes and Up% default to 0 (Locked)
     add_range_args("bump-vol", 0, 0, 10000, "Min Bump Size Vol")
@@ -173,6 +175,11 @@ def main():
         'bump_thresh_type': 'percent',
         'slide_thresh_type': 'percent',
     }
+    
+    if args.start_year is not None:
+        fixed_params['start_year'] = args.start_year
+    if args.end_year is not None:
+        fixed_params['end_year'] = args.end_year
     
     # Setup Callback
     start_time = time.time()

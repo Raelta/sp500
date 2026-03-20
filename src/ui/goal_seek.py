@@ -108,10 +108,10 @@ def render_goal_seek(df, cli_args, val_report):
         gs_params = {}
         
         # Lengths (Compact Mode)
-        b_len_start, b_len_end, b_len_step = render_range_input("Bump Length (min)", 1, 2880, 10, 10, 1, "gs_b_len", compact=True)
+        b_len_start, b_len_end, b_len_step = render_range_input("Bump Length (min)", 1, 2880, 30, 30, 1, "gs_b_len", compact=True)
         gs_params['bump_len'] = (b_len_start, b_len_end, b_len_step)
         
-        s_len_start, s_len_end, s_len_step = render_range_input("Slide Length (min)", 1, 2880, 10, 10, 1, "gs_s_len", compact=True)
+        s_len_start, s_len_end, s_len_step = render_range_input("Slide Length (min)", 1, 2880, 30, 30, 1, "gs_s_len", compact=True)
         gs_params['slide_len'] = (s_len_start, s_len_end, s_len_step)
         
         # Thresholds & Direction
@@ -120,14 +120,14 @@ def render_goal_seek(df, cli_args, val_report):
         with col_b1:
             b_dir = st.radio("Bump Direction", ["Positive", "Negative"], horizontal=True, label_visibility="collapsed", key="gs_b_dir")
         with col_b2:
-            min_b_thresh = st.number_input("Min Bump %", value=0.5, step=0.1, key="gs_min_b_thresh")
+            min_b_thresh = st.number_input("Min Bump %", value=0.02, step=0.1, key="gs_min_b_thresh")
 
         st.markdown("**Slide Settings**")
         col_s1, col_s2 = st.columns(2)
         with col_s1:
             s_dir = st.radio("Slide Direction", ["Positive", "Negative"], horizontal=True, label_visibility="collapsed", key="gs_s_dir")
         with col_s2:
-            min_s_thresh = st.number_input("Min Slide %", value=0.3, step=0.1, key="gs_min_s_thresh")
+            min_s_thresh = st.number_input("Min Slide %", value=0.06, step=0.1, key="gs_min_s_thresh")
         
         # Advanced Parameters Expander
         with st.expander("Advanced parameters", expanded=False):
