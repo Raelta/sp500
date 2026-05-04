@@ -4,7 +4,7 @@ import sys
 import time
 import os
 import numpy as np
-from src.data_loader import load_data_uncached
+from src.data_loader import DATASETS, DEFAULT_SYMBOL, load_data_uncached
 from src.search_engine import GoalSeeker
 
 def parse_args():
@@ -51,7 +51,25 @@ Output Columns:
     )
     
     # Global Config
-    parser.add_argument("--data", default="spy_data_25yr.parquet", help="Path to data file")
+    parser.add_argument(
+        "--symbol",
+        default=DEFAULT_SYMBOL,
+        choices=list(DATASETS.keys()),
+        help=f"Dataset symbol. Default: {DEFAULT_SYMBOL}.",
+    )
+    parser.add_argument(
+        "--data",
+        default=None,
+        help="Override parquet path (advanced). If unset, derived from --symbol.",
+    )
+    parser.add_argument(
+        "--include-extended-hours",
+        action="store_true",
+        help=(
+            "For datasets with pre/post-market bars (e.g. NVDA), include them. "
+            "Default: regular hours only (09:30–16:00 ET)."
+        ),
+    )
     parser.add_argument("--min-bumps", type=int, default=0, help="Minimum Total Bumps Required")
     parser.add_argument("--top-n", type=int, default=20, help="Number of top results to display")
     parser.add_argument("--output", default="goal_seek_results.csv", help="Output CSV filename")
@@ -130,14 +148,17 @@ def generate_grid(args):
 def main():
     args = parse_args()
     
+    data_arg = args.data if args.data else args.symbol
+
     print(f"--- Goal Seek CLI ---")
-    print(f"Data: {args.data}")
+    print(f"Symbol: {args.symbol} (extended_hours={args.include_extended_hours})")
+    print(f"Data: {data_arg}")
     print(f"Min Bumps: >={args.min_bumps}")
-    
+
     # Load Data
     df = None
     try:
-        df = load_data_uncached(args.data)
+        df = load_data_uncached(data_arg, include_extended_hours=args.include_extended_hours)
         print(f"Loaded {len(df)} rows.")
         
         # Clean Duplicates

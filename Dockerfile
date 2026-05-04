@@ -22,6 +22,7 @@ RUN pip install --no-cache-dir google-cloud-storage --root-user-action=ignore
 # Copy source code
 COPY src/ ./src/
 COPY spy_data_25yr.parquet .
+COPY nvda_data_6yr.parquet .
 COPY cloud_job.py .
 COPY precompute_validation.py .
 

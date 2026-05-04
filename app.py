@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 import time as time_module
-from src.data_loader import load_data_cached
+from src.data_loader import DATASETS, DEFAULT_SYMBOL, load_data_cached
 from src.data_validator import validate_dataset, get_yearly_duplicate_summary
 from src.config import get_cli_args
 from src.ui.utils import log_perf, inject_compact_sidebar_style
@@ -43,6 +43,10 @@ if 'stats' not in st.session_state:
     st.session_state.stats = None
 if 'app_mode' not in st.session_state:
     st.session_state.app_mode = "Goal Seek"
+if 'symbol' not in st.session_state:
+    st.session_state.symbol = DEFAULT_SYMBOL
+if 'include_extended_hours' not in st.session_state:
+    st.session_state.include_extended_hours = False
 
 t0 = time_module.time()
 print(f"--- RERUN STARTED at {t0} ---")
@@ -50,10 +54,54 @@ print(f"--- RERUN STARTED at {t0} ---")
 # Parse CLI Args
 cli_args = get_cli_args()
 
+# Symbol selector (sidebar). Determines which dataset is loaded.
+with st.sidebar:
+    symbols = list(DATASETS.keys())
+    current_idx = symbols.index(st.session_state.symbol) if st.session_state.symbol in symbols else 0
+    selected_symbol = st.selectbox(
+        "Dataset",
+        symbols,
+        index=current_idx,
+        format_func=lambda s: DATASETS[s]["label"],
+        key="symbol_selector",
+        help="Switching datasets reloads data and clears year-range widgets.",
+    )
+    if selected_symbol != st.session_state.symbol:
+        st.session_state.symbol = selected_symbol
+        for k in ("gs_b_len_start", "gs_b_len_end", "gs_s_len_start", "gs_s_len_end",
+                  "applied_config"):
+            st.session_state.pop(k, None)
+        st.rerun()
+
+    # Extended-hours toggle — only meaningful for symbols that have pre/post-market data.
+    sym_info = DATASETS[st.session_state.symbol]
+    if sym_info.get("has_extended_hours"):
+        include_ext = st.checkbox(
+            "Include pre/post-market",
+            value=st.session_state.include_extended_hours,
+            key="ext_hours_toggle",
+            help=(
+                "Off (default): regular trading hours only (09:30–16:00 ET, "
+                "391 bars/day — matches SPY).\n\n"
+                "On: includes 04:01–20:00 ET pre/post-market bars (~960/day, "
+                "noisier and lower-volume)."
+            ),
+        )
+        if include_ext != st.session_state.include_extended_hours:
+            st.session_state.include_extended_hours = include_ext
+            st.session_state.pop("applied_config", None)
+            st.rerun()
+    else:
+        # Force off for symbols without extended hours; toggle is hidden.
+        st.session_state.include_extended_hours = False
+
 # Load Data
-with st.spinner("Loading data..."):
+with st.spinner(f"Loading {st.session_state.symbol} data..."):
     t_load_start = time_module.time()
-    df, val_report = load_data_cached("spy_data_25yr.parquet")
+    df, val_report = load_data_cached(
+        st.session_state.symbol,
+        include_extended_hours=st.session_state.include_extended_hours,
+    )
     t0 = log_perf("Data Load (Cached)", t_load_start)
 
 # Data Quality Check (Minimized display in main app)
@@ -124,7 +172,11 @@ with col_help:
 if st.session_state.app_mode == "Exploration":
     render_exploration(df, cli_args, val_report)
 else:
-    render_goal_seek(df, cli_args, val_report)
+    render_goal_seek(
+        df, cli_args, val_report,
+        symbol=st.session_state.symbol,
+        include_extended_hours=st.session_state.include_extended_hours,
+    )
 
 render_footer()
 

@@ -11,4 +11,5 @@ catalog/change_matrix.npy
 .DS_Store
 key.json
 validation_report.pkl
+validation_report_*.pkl
 .streamlit/secrets.toml

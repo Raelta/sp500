@@ -86,30 +86,20 @@ def check_intraday_gaps(df):
         "data": gaps_df
     }
 
-def check_missing_minutes(df):
+def check_missing_minutes(df, expected_count=391):
     """
-    Checks for missing 1-minute intervals between 08:30 and 15:00 on trading days.
+    Checks for missing 1-minute intervals on trading days.
+    expected_count is the typical bars-per-day for the dataset
+    (e.g. 391 for SPY regular hours, ~960 for NVDA extended hours).
     Assumes duplicates have been removed or dealt with.
     """
     if df.empty or 'date' not in df.columns:
         return {"count": 0, "data": pd.DataFrame()}
 
-    # Group by date to analyze each day
-    # We create a reference range for each day present in the data
-    
-    # 1. Get unique dates
-    unique_dates = df['date'].dt.date.unique()
-    
-    # 2. Expected count per day (08:30 to 15:00 inclusive = 391 minutes)
-    # 8:30 to 15:00 is 6.5 hours = 390 mins + 1 (inclusive start/end) 
-    # Usually SPY data includes the 15:00 (3:00 PM) close bar. 
-    EXPECTED_COUNT = 391
-    
-    # 3. Count actual rows per day
     daily_counts = df.groupby(df['date'].dt.date).size()
     
     # 4. Identify days with missing data
-    incomplete_days = daily_counts[daily_counts < EXPECTED_COUNT]
+    incomplete_days = daily_counts[daily_counts < expected_count]
     
     if len(incomplete_days) == 0:
         return {"count": 0, "data": pd.DataFrame()}
@@ -118,8 +108,8 @@ def check_missing_minutes(df):
     missing_stats = pd.DataFrame({
         'date': incomplete_days.index,
         'actual_count': incomplete_days.values,
-        'missing_count': EXPECTED_COUNT - incomplete_days.values,
-        'completeness_pct': (incomplete_days.values / EXPECTED_COUNT) * 100
+        'missing_count': expected_count - incomplete_days.values,
+        'completeness_pct': (incomplete_days.values / expected_count) * 100
     }).sort_values('date')
     
     return {
@@ -128,23 +118,21 @@ def check_missing_minutes(df):
         "data": missing_stats
     }
 
-def validate_dataset(df):
-    # Important: Run duplicates check first
+def validate_dataset(df, expected_minutes_per_day=391):
     dup_res = check_duplicates(df)
-    
-    # For missing minutes, we should conceptually check on "clean" data, 
-    # otherwise duplicates might mask missing times (e.g. 2x 9:30, 0x 9:31 -> count is 2, looks full)
-    # So we simulate a unique dataset for the missing check
+
+    # For missing minutes, conceptually check on "clean" data — otherwise
+    # duplicates can mask missing times (e.g. 2x 9:30 + 0x 9:31 looks full).
     if dup_res['count'] > 0:
         clean_df = df.drop_duplicates(subset=['date'])
     else:
         clean_df = df
-        
+
     return {
         "duplicates": dup_res,
         "missing_values": check_missing_values(df),
         "intraday_gaps": check_intraday_gaps(df),
-        "missing_minutes": check_missing_minutes(clean_df)
+        "missing_minutes": check_missing_minutes(clean_df, expected_count=expected_minutes_per_day)
     }
 
 def get_yearly_duplicate_summary(dups_df):

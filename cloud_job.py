@@ -5,7 +5,7 @@ import pandas as pd
 import psutil
 from datetime import datetime
 from src.search_engine import GoalSeeker
-from src.data_loader import load_data_uncached
+from src.data_loader import DATASETS, DEFAULT_SYMBOL, load_data_uncached
 from src.notifications import send_google_chat_notification
 
 def log_memory(label=""):
@@ -39,7 +39,14 @@ def run_job():
         return
     
     # Params
-    data_path = config.get("data_path", "spy_data_25yr.parquet")
+    # New flow uses `symbol`; older configs may still pass `data_path`.
+    symbol = config.get("symbol")
+    if symbol and symbol in DATASETS:
+        data_path = DATASETS[symbol]["path"]
+    else:
+        data_path = config.get("data_path", DATASETS[DEFAULT_SYMBOL]["path"])
+        symbol = symbol or DEFAULT_SYMBOL
+    include_extended_hours = bool(config.get("include_extended_hours", False))
     params_grid = config.get("params_grid")
     fixed_params = config.get("fixed_params")
     
@@ -54,11 +61,14 @@ def run_job():
     optimization_mode = "GOAL_SEEKER_IN_MEMORY"
     
     print(f"[{datetime.now().strftime('%H:%M:%S')}] 🚀 Starting Cloud Job using In-Memory Engine", flush=True)
+    print(f"[{datetime.now().strftime('%H:%M:%S')}] Symbol: {symbol} (extended_hours={include_extended_hours})", flush=True)
     print(f"[{datetime.now().strftime('%H:%M:%S')}] Loading raw data from {data_path}...", flush=True)
-    
+
     try:
-        df = load_data_uncached(data_path)
-        # Pre-clean duplicates as app does
+        # Use the symbol if registered (so extended-hours filtering applies);
+        # otherwise fall back to the raw path.
+        load_arg = symbol if symbol in DATASETS else data_path
+        df = load_data_uncached(load_arg, include_extended_hours=include_extended_hours)
         df = df.drop_duplicates(subset=['date'], keep='first').reset_index(drop=True)
         log_memory("Data Loaded")
     except Exception as e:
@@ -92,6 +102,7 @@ def run_job():
         max_confidence = 0.0
         if not results.empty:
             results['optimization_mode'] = optimization_mode
+            results['symbol'] = symbol
             
             # Calculate Max Confidence for Metadata
             if 'total_hits' in results.columns and 'total_bumps' in results.columns:
@@ -137,7 +148,10 @@ def run_job():
                         metadata = {
                             "timestamp": datetime.now().isoformat(),
                             "user_label": user_label,
+                            "symbol": symbol,
+                            "include_extended_hours": include_extended_hours,
                             "params_grid": params_grid,
+                            "fixed_params": fixed_params,
                             "min_bumps": min_bumps,
                             "result_blob": blob_name,
                             "total_results": len(results),

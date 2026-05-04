@@ -102,7 +102,7 @@ def format_params_grid(grid, fixed_params=None):
             
     return " | ".join(parts)
 
-def render_goal_seek(df, cli_args, val_report):
+def render_goal_seek(df, cli_args, val_report, symbol="SPY", include_extended_hours=False):
     # --- SIDEBAR INPUTS ---
     with st.sidebar:
         gs_params = {}
@@ -229,8 +229,10 @@ def render_goal_seek(df, cli_args, val_report):
                 metadata_blob = f"metadata_{safe_label}_{run_id}.json"
                 
                 config_dict = {
-                    "params_grid": grid, 
-                    "fixed_params": fixed_params, 
+                    "symbol": symbol,
+                    "include_extended_hours": include_extended_hours,
+                    "params_grid": grid,
+                    "fixed_params": fixed_params,
                     "min_bumps": min_bumps_req,
                     "user_label": safe_label,
                     "gcs_output_path": f"gs://{gcp_bucket}/{result_blob}",
@@ -250,6 +252,8 @@ def render_goal_seek(df, cli_args, val_report):
                                 "run_id": run_id,
                                 "timestamp": datetime.now().isoformat(),
                                 "user_label": safe_label,
+                                "symbol": symbol,
+                                "include_extended_hours": include_extended_hours,
                                 "total_configs": total_configs,
                                 "est_time_mins": est_time_mins,
                                 "params_grid": grid,
@@ -437,6 +441,7 @@ def render_goal_seek(df, cli_args, val_report):
                          "Run Time": ts_fmt,
                          "Time Since": time_since,
                          "User": h.get('user_label', 'Unknown'),
+                         "Symbol": h.get('symbol', 'SPY'),
                          "Status": h.get('status', 'UNKNOWN'),
                          "Est. Time": est_str,
                          "Actual Time": act_str,

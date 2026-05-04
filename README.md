@@ -1,9 +1,12 @@
 # SP500 Bump & Slide Analysis
 
-A Python application designed to analyze intraday SPY (S&P 500 ETF) data for "Bump and Slide" price patterns. This tool provides an interactive Streamlit dashboard for visual analysis with powerful filtering and configuration options.
+A Python application designed to analyze intraday equity data for "Bump and Slide" price patterns. The default dataset is SPY (S&P 500 ETF, ~25 years), with NVDA (NVIDIA, ~6 years) also available. This tool provides an interactive Streamlit dashboard for visual analysis with powerful filtering and configuration options.
 
 ## Features
 
+- **Multi-Dataset Support**:
+  - Switch between SPY and NVDA from the sidebar; both engines and the cloud worker are dataset-agnostic.
+  - **Extended-hours toggle** (NVDA only): off by default → restricts analysis to regular trading hours (09:30–16:00 ET, 391 bars/day, matching SPY). Toggle on to include 04:01–20:00 ET pre/post-market data.
 - **Pattern Detection**: 
   - Automatically identifies "Bump" (initial trend) and "Slide" (subsequent reaction) patterns.
   - Detects patterns based on configurable lengths (minutes), thresholds (price/%), and volume.
@@ -74,6 +77,40 @@ python goal_seek_cli.py --min-bumps 10
 **Key Arguments:**
 - `--min-bumps`: Filter results requiring a minimum number of pattern occurrences.
 - `--min-bump-threshold`: Set the minimum bump % threshold (replaces start/end/step logic for thresholds).
+- `--symbol {SPY,NVDA}`: Choose dataset (default `SPY`).
+- `--include-extended-hours`: For NVDA, include pre/post-market bars (04:01–20:00 ET). Off by default; regular hours only.
+
+```bash
+# Run NVDA (regular hours, default)
+python goal_seek_cli.py --symbol NVDA --start-year 2024 --end-year 2024
+
+# Run NVDA including pre/post-market
+python goal_seek_cli.py --symbol NVDA --include-extended-hours
+```
+
+---
+
+## Datasets
+
+Datasets are registered in `src/data_loader.DATASETS`. Each entry maps a symbol to a parquet file plus metadata:
+
+| Symbol | Source | Time span | Bars/day (regular) | Pre/Post-market | Parquet |
+|---|---|---|---|---|---|
+| `SPY` | S&P 500 ETF | 2001 – 2026 (~25y) | 391 (08:30–15:00 CT) | not included | `spy_data_25yr.parquet` |
+| `NVDA` | NVIDIA Corp | 2020 – 2026 (~6y) | 391 (09:30–16:00 ET, default) or 960 (04:01–20:00 ET, opt-in) | toggleable | `nvda_data_6yr.parquet` |
+
+**Switching datasets in the UI**: dropdown at the top of the sidebar. The page reloads; year-range widgets and `applied_config` are reset so they re-clamp to the new dataset's range.
+
+**Extended-hours toggle**: only appears for symbols with `has_extended_hours = True`. When off, NVDA data is filtered at load time to 09:30–16:00 ET — giving you a like-for-like comparison with SPY (same bars/day, same session structure). When on, pre/post-market bars are kept (noisier, lower volume; useful for analyzing earnings-day moves).
+
+**Adding a new dataset**:
+1. Convert the source CSV to parquet with columns `date, open, high, low, close, volume`. See `convert_nvda_to_parquet.py` for the pattern.
+2. Add an entry to `DATASETS` in `src/data_loader.py` with `path`, `label`, `expected_minutes_per_day`, and `has_extended_hours`.
+3. Run `python precompute_validation.py` to generate the validation pickle(s).
+4. Add the parquet to the `Dockerfile` `COPY` block so the cloud worker can find it.
+5. Rebuild via `./deploy_cloud.sh`.
+
+The search engine (`src/search_engine.py`) and analyzer (`src/analyzer.py`) are completely symbol-agnostic — they only see a dataframe and a config dict. All symbol awareness lives in the loader and the UI.
 
 ---
 
@@ -136,7 +173,7 @@ graph TD
 ## Quality Assurance Strategy
 
 ### 1. Problem Statement
-The primary challenge in this project is the **Unknown Data Quality** of the input source (`spy_data_25yr.parquet`). Reliance on this data makes it difficult to verify if analytical features (Bump & Slide detection) are functioning correctly or if they are failing due to data anomalies.
+The primary challenge in this project is the **Unknown Data Quality** of the input sources (`spy_data_25yr.parquet`, `nvda_data_6yr.parquet`). Reliance on real market data makes it difficult to verify if analytical features (Bump & Slide detection) are functioning correctly or if they are failing due to data anomalies.
 
 ### 2. Core Strategy: Synthetic Verification
 To ensure robustness, we will decouple **Logic Verification** from **Data Quality**. We will achieve this by creating a **Synthetic Data Generator** that produces "controlled" market data. This allows us to verify that *if* a pattern exists, the code *will* find it.
