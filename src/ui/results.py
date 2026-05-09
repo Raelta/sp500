@@ -28,13 +28,12 @@ def render_results(results, stats, config, df_filtered, val_report=None):
     # Display Stats (Hit Rate)
     if stats:
         with st.expander("📊 Pattern Statistics (Hit Rate)", expanded=True):
-            col0, col1, col2, col3, col4, col5 = st.columns(6)
+            col0, col1, col2, col3, col4 = st.columns(5)
             col0.metric("Total Windows", f"{stats.get('total_rows', 0):,.0f}", help="Total number of analyzed windows/bars")
             col1.metric("Total Bumps", f"{stats['total_bumps']:,.0f}", help="Candidates matching Bump criteria")
             col2.metric("Total Hits", f"{stats.get('total_hits', stats.get('hits', 0)):,.0f}", help="All overlapping patterns")
             col3.metric("True Hits", f"{stats.get('true_hits', 0):,.0f}", help="Best unique patterns (overlap removed)")
             col4.metric("Misses", f"{stats['misses']:,.0f}", help="Bumps NOT followed by matching Slide")
-            col5.metric("Confidence Score", f"{stats.get('hit_ratio', 0):.2f}%", help="Total Hits / Total Bumps")
 
     # Display Results
     if not results.empty:

@@ -6,10 +6,7 @@ import streamlit as st
 from datetime import time
 from google.cloud import run_v2
 from google.cloud import storage
-try:
-    from google.cloud import logging as cloud_logging
-except ImportError:
-    cloud_logging = None
+from google.cloud import logging as cloud_logging
 import google.auth
 from google.oauth2 import service_account
 
@@ -92,8 +89,6 @@ class CloudRunner:
     @property
     def logging_client(self):
         if self._logging_client is None:
-            if cloud_logging is None:
-                raise ImportError("google-cloud-logging is not installed.")
             creds = self.get_credentials()
             self._logging_client = cloud_logging.Client(credentials=creds, project=self.project_id)
         return self._logging_client
@@ -422,9 +417,6 @@ gcloud auth application-default login
         """
         Fetches recent logs for a specific job execution.
         """
-        if cloud_logging is None:
-            return "Logging is not available. (google-cloud-logging not installed)"
-        
         ok, msg = self.check_credentials()
         if not ok:
             return msg
@@ -470,9 +462,6 @@ gcloud auth application-default login
         Fetches the latest progress percentage from logs.
         Returns (percent_float_0_1, message_str)
         """
-        if cloud_logging is None:
-            return 0.0, "Logging unavailable..."
-            
         ok, msg = self.check_credentials()
         if not ok:
             return 0.0, "Waiting for credentials..."
