@@ -49,6 +49,7 @@ def find_bumps_and_slides(
     bump_up_pct=0.0, slide_up_pct=0.0,
     time_range=None, # (start_time, end_time)
     days_of_week=None, # list of ints 0-6 or names
+    exclude_cross_day=False,
     progress_callback=None # function(message, percent)
 ):
     """
@@ -145,6 +146,11 @@ def find_bumps_and_slides(
             # days_of_week expected to be list of day names (Mon, Tue...) or integers
             # Let's standardize on day_name()
             candidates = candidates[candidates['date'].dt.day_name().isin(days_of_week)]
+
+        # Cross-Day Exclusion: drop windows where bump start and slide end are different calendar dates
+        if exclude_cross_day:
+            same_day_mask = candidates['date'].dt.date == candidates['slide_end_date'].dt.date
+            candidates = candidates[same_day_mask]
 
     # 4. Filter by Thresholds and Volume
     if progress_callback: progress_callback("Filtering candidates...", 70)

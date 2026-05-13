@@ -76,6 +76,20 @@ Output Columns:
     parser.add_argument("--detailed", action="store_true", help="Output detailed matches (one row per match) in results CSV instead of summaries")
     parser.add_argument("--start-year", type=int, help="Start year for data filtering")
     parser.add_argument("--end-year", type=int, help="End year for data filtering")
+    cross_day = parser.add_mutually_exclusive_group()
+    cross_day.add_argument(
+        "--include-cross-day",
+        dest="exclude_cross_day",
+        action="store_false",
+        help="Include patterns whose bump start and slide end fall on different calendar dates.",
+    )
+    cross_day.add_argument(
+        "--exclude-cross-day",
+        dest="exclude_cross_day",
+        action="store_true",
+        help="Exclude patterns whose bump start and slide end fall on different calendar dates (default).",
+    )
+    parser.set_defaults(exclude_cross_day=True)
     
     # Helper to add range args
     def add_range_args(name, default_start, default_end, default_step, help_text):
@@ -201,6 +215,9 @@ def main():
         fixed_params['start_year'] = args.start_year
     if args.end_year is not None:
         fixed_params['end_year'] = args.end_year
+
+    fixed_params['exclude_cross_day'] = args.exclude_cross_day
+    print(f"Exclude Cross-Day: {args.exclude_cross_day}")
     
     # Setup Callback
     start_time = time.time()

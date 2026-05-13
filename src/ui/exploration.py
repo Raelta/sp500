@@ -49,7 +49,8 @@ def render_exploration(df, cli_args, val_report):
             bump_up_pct=run_config['bump_up_pct'],
             slide_up_pct=run_config['slide_up_pct'],
             time_range=run_config['time_range'],
-            days_of_week=run_config['days_of_week']
+            days_of_week=run_config['days_of_week'],
+            exclude_cross_day=run_config.get('exclude_cross_day', True),
         )
         st.session_state.results = results
         st.session_state.stats = stats

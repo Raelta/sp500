@@ -213,6 +213,48 @@ def test_value_threshold(generator):
     )
     assert results_fail[results_fail['date'] == injected_time].empty
 
+def test_exclude_cross_day(generator):
+    # Default minutes_per_day=391, so day 0 = indices 0..390, day 1 = 391..781, etc.
+    # Inject one pattern wholly inside day 0, and one that straddles the day boundary.
+    df = generator.generate_noise(days=3, volatility=0.0001)
+
+    intraday_idx = 100  # bump 100..109, slide 110..119 — all in day 0
+    df = generator.inject_pattern(df, index=intraday_idx, bump_len=10, slide_len=10, bump_pct=0.05, slide_pct=-0.05)
+
+    cross_idx = 385  # bump 385..394 (straddles 390/391 boundary), slide 395..404 (in day 1)
+    df = generator.inject_pattern(df, index=cross_idx, bump_len=10, slide_len=10, bump_pct=0.05, slide_pct=-0.05)
+
+    intraday_time = df.iloc[intraday_idx]['date']
+    cross_time = df.iloc[cross_idx]['date']
+
+    # Sanity: the cross-day injection actually crosses days in the synthetic data
+    assert df.iloc[cross_idx]['date'].date() != df.iloc[cross_idx + 10 + 10 - 1]['date'].date()
+
+    # With filter OFF, both patterns are found
+    results_off, stats_off = find_bumps_and_slides(
+        df,
+        bump_len=10, bump_threshold=4.0, bump_thresh_type="percent",
+        slide_len=10, slide_threshold=-4.0, slide_thresh_type="percent",
+        exclude_cross_day=False,
+    )
+    assert not results_off[results_off['date'] == intraday_time].empty
+    assert not results_off[results_off['date'] == cross_time].empty
+
+    # With filter ON, only the intraday pattern remains
+    results_on, stats_on = find_bumps_and_slides(
+        df,
+        bump_len=10, bump_threshold=4.0, bump_thresh_type="percent",
+        slide_len=10, slide_threshold=-4.0, slide_thresh_type="percent",
+        exclude_cross_day=True,
+    )
+    assert not results_on[results_on['date'] == intraday_time].empty
+    assert results_on[results_on['date'] == cross_time].empty
+
+    # Stats reflect the filter — fewer hits/bumps when cross-day excluded
+    assert stats_on['total_hits'] < stats_off['total_hits']
+    assert stats_on['total_bumps'] <= stats_off['total_bumps']
+
+
 def test_time_range_filter(generator):
     # Inject pattern at 10:00 AM
     df = generator.generate_noise(days=1, start_time="09:30")

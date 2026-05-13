@@ -99,7 +99,9 @@ def format_params_grid(grid, fixed_params=None):
                 parts.append(f"Yr:{s_yr}")
             else:
                 parts.append(f"Yr:{s_yr}-{e_yr}")
-            
+        if fixed_params.get('exclude_cross_day'):
+            parts.append("IntraDayOnly")
+
     return " | ".join(parts)
 
 def render_goal_seek(df, cli_args, val_report, symbol="SPY", include_extended_hours=False):
@@ -158,6 +160,13 @@ def render_goal_seek(df, cli_args, val_report, symbol="SPY", include_extended_ho
         with col_y2:
             end_year = st.number_input("End Year", min_value=min_year, max_value=max_year, value=max_year)
 
+        exclude_cross_day = st.checkbox(
+            "Exclude cross-day matches",
+            value=True,
+            help="Drop patterns whose bump start and slide end fall on different calendar dates.",
+            key="gs_exclude_cross_day",
+        )
+
         # Execution
         run_cloud = st.checkbox("☁️ Cloud Run", value=True)
         
@@ -193,11 +202,12 @@ def render_goal_seek(df, cli_args, val_report, symbol="SPY", include_extended_ho
     grid['bump_threshold'] = [final_b_thresh]
     grid['slide_threshold'] = [final_s_thresh]
     
-    fixed_params = { 
-        'bump_thresh_type': 'percent', 
+    fixed_params = {
+        'bump_thresh_type': 'percent',
         'slide_thresh_type': 'percent',
         'start_year': start_year,
-        'end_year': end_year
+        'end_year': end_year,
+        'exclude_cross_day': bool(exclude_cross_day),
     }
 
     # Calculate and display estimate
@@ -600,6 +610,7 @@ def render_goal_seek(df, cli_args, val_report, symbol="SPY", include_extended_ho
                         'time_range': None, # Default full day
                         'days_of_week': None, # Default all days
                         'layout_order': "Table Top", # Default layout
+                        'exclude_cross_day': bool(exclude_cross_day),
                         # Pass through scalar values for potential plotting needs
                         'selected_years': sorted(df['date'].dt.year.unique()), # All years
                         'all_years': sorted(df['date'].dt.year.unique())
@@ -627,7 +638,8 @@ def render_goal_seek(df, cli_args, val_report, symbol="SPY", include_extended_ho
                             min_bump_vol=viz_config['min_bump_vol'],
                             min_slide_vol=viz_config['min_slide_vol'],
                             bump_up_pct=viz_config['bump_up_pct'],
-                            slide_up_pct=viz_config['slide_up_pct']
+                            slide_up_pct=viz_config['slide_up_pct'],
+                            exclude_cross_day=viz_config['exclude_cross_day'],
                         )
                         
                         if not results.empty:

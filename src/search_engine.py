@@ -6,7 +6,7 @@ from src.analyzer import calculate_change
 from concurrent.futures import ProcessPoolExecutor, as_completed
 import os
 
-def _process_structure(df_all, s_dict, filter_keys, filter_values, target_cr_min, min_bumps=0, detailed=False):
+def _process_structure(df_all, s_dict, filter_keys, filter_values, target_cr_min, min_bumps=0, detailed=False, exclude_cross_day=False):
     """
     Worker function to process a single structural configuration.
     Uses Vectorized Broadcasting (Matrix Multiplication) to check all filter combinations efficiently.
@@ -139,12 +139,20 @@ def _process_structure(df_all, s_dict, filter_keys, filter_values, target_cr_min
 
     bump_matrix = build_matrix(bump_indices, bump_combos)
     slide_matrix = build_matrix(slide_indices, slide_combos)
-    
-    # IMPORTANT: The slide starts at i + bump_len. 
+
+    # IMPORTANT: The slide starts at i + bump_len.
     # But in slide_matrix, index i already contains the metric for start=i.
     # Because we already shifted the raw series by -(bump_len) earlier when creating slide_change.
     # So both bump_matrix[i] and slide_matrix[i] refer to the SAME pattern starting at i.
-    
+
+    # Cross-day exclusion: AND a per-row mask into bump_matrix so total_bumps, hits, NMS all reflect it.
+    if exclude_cross_day:
+        bump_start_dates = df_all['date'].dt.date.values
+        slide_end_dates = df_all['date'].shift(-(bump_len + slide_len - 1)).dt.date.values
+        same_day = (bump_start_dates == slide_end_dates)
+        if bump_matrix.shape[1] > 0:
+            bump_matrix = bump_matrix & same_day[:, None]
+
     hits_matrix = np.dot(bump_matrix.T.astype(np.float32), slide_matrix.astype(np.float32))
     total_bumps_vec = bump_matrix.sum(axis=0)
     
@@ -278,6 +286,9 @@ class GoalSeeker:
         struct_values = [get_param_values(k) for k in structural_keys]
         filter_values = [get_param_values(k) for k in filter_keys]
         
+        # Cross-day exclusion flag (default False = include cross-day matches)
+        exclude_cross_day = bool(fixed_params.get('exclude_cross_day', False)) if fixed_params else False
+
         # Apply Year Filtering if provided in fixed_params
         df_to_search = self.df
         if fixed_params:
@@ -311,7 +322,7 @@ class GoalSeeker:
             for struct_combo in struct_combos:
                 s_dict = dict(zip(structural_keys, struct_combo))
                 future = executor.submit(
-                    _process_structure, df_to_search, s_dict, filter_keys, filter_values, target_cr_min, min_bumps, detailed
+                    _process_structure, df_to_search, s_dict, filter_keys, filter_values, target_cr_min, min_bumps, detailed, exclude_cross_day
                 )
                 future_to_struct[future] = s_dict
             

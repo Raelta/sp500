@@ -106,6 +106,14 @@ def render_sidebar(df, cli_args):
     with col_v2:
         min_slide_vol = st.number_input("Min Slide Vol", min_value=0, value=int(msv_default), step=1000, key="sb_min_slide_vol")
 
+    ecd_default = applied.get('exclude_cross_day', True)
+    exclude_cross_day = st.sidebar.checkbox(
+        "Exclude cross-day matches",
+        value=bool(ecd_default),
+        help="Drop patterns whose bump start and slide end fall on different calendar dates (the yellow rows).",
+        key="sb_exclude_cross_day",
+    )
+
     # --- TIME OF DAY ---
     st.sidebar.subheader("Time of Day")
     tr_default = applied.get('time_range', (time(8, 30), time(15, 0)))
@@ -152,5 +160,6 @@ def render_sidebar(df, cli_args):
         'days_of_week': days,
         'selected_years': selected_years,
         'layout_order': layout_order,
-        'all_years': all_years
+        'all_years': all_years,
+        'exclude_cross_day': exclude_cross_day,
     }
